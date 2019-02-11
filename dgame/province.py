@@ -26,5 +26,9 @@ class Province:
             self.coasts,
             self.neighbours)
 
+    @property
+    def name(self):
+        return self.id.name
+
 
 

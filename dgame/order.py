@@ -1,12 +1,45 @@
+"""
+
+0. A LON H                     Hold Position
+1. F IRI - MAO                 Attack/Attack         MAO
+2. A IRI - MAO VIA             Attack/Attack         MAO using convoy
+3. F NWG C A NWY - EDI         Convoy Attack/Move
+
+4. A WAL S F LON               Support Hold
+5. A WAL S F MAO - IRI         Support Attack/Attack
+
+6. A IRO R MAO                 Retreat
+7. A IRO D                     Disband
+8. A LON B                     Build
+
+"""
+
 from enum import IntEnum, unique
 from dgame.province import Province
+
 
 @unique
 class OrderTypes(IntEnum):
     Hold = 0
     Move = 1
-    Convoy = 2
-    Support = 3
+    ConvoyMove = 2
+    Convoy = 3
+    Support = 4
+    SupportMove = 5
+    Retreat = 6
+    Disband = 7
+    Build = 8
+
+
+HOLD = OrderTypes.Hold
+MOVE = OrderTypes.Move
+CONVOY = OrderTypes.Convoy
+CONVOY_MOVE = OrderTypes.ConvoyMove
+SUPPORT = OrderTypes.Support
+SUPPORT_MOVE = OrderTypes.SupportMove
+RETREAT = OrderTypes.Retreat
+BUILD = OrderTypes.Build
+DISBAND = OrderTypes.Disband
 
 
 class Order:
@@ -20,7 +53,22 @@ class Order:
         self.dest = dest
 
     def __repr__(self):
-        return '{} {} - {}'.format(self.order_type, self.unit.loc, self.dest)
+        if self.order_type == HOLD:
+            return '\'{} {} H\''.format(self.unit.unit_type, self.unit.loc.name)
+        if self.order_type == SUPPORT:
+            return '\'{} {} S {}\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
+        if self.order_type == MOVE:
+            return '\'{} {} - {}\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
+        if self.order_type == CONVOY_MOVE:
+            return '\'{} {} - {} VIA\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
+        if self.order_type == CONVOY:
+            return '\'{} {} C {}\''.format(self.unit.unit_type, self.unit.loc.name)
+        if self.order_type == RETREAT:
+            return '\'{} {} R {}\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
+        if self.order_type == BUILD:
+            return '\'{} {} B\''.format(self.unit.unit_type, self.unit.loc.name)
+        if self.order_type == DISBAND:
+            return '\'{} {} D\''.format(self.unit.unit_type, self.unit.loc.name)
 
 
 def hold(unit: 'Unit'):

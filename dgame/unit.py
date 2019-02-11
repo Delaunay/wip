@@ -4,7 +4,7 @@ from dgame.order import Order, move, hold, support, convoy
 from dgame.diplomacy_europe_1901 import Diplomacy1901
 
 from enum import IntEnum, unique
-from typing import List, Set
+from typing import Set
 
 
 @unique
@@ -12,24 +12,41 @@ class UnitType(IntEnum):
     Army = 0
     Fleet = 1
 
+    def __repr__(self):
+        if self.value:
+            return 'F'
+        return 'A'
+
+    def __str__(self):
+        if self.value:
+            return 'F'
+        return 'A'
+
 
 class Unit:
     def __init__(self, loc: Province, owner: Player, board: 'Board'):
         self.loc = loc
         self.owner = owner
         self.board = board
+        self.unit_type = None
 
-    def get_possible_order(self):
-        return self.possible_attack_order() + self.possible_support_order() + self.possible_hold_order()
+    def get_possible_order(self) -> Set[Order]:
+        tiles = self.reachable_tiles()
 
-    def possible_attack_order(self):
-        raise NotImplementedError
+        orders = {hold(self)}
 
-    def possible_support_order(self):
-        pass
+        for tile in tiles:
+            sup_unit = self.board.get_unit(tile)
+            if sup_unit is not None:
+                orders.add(support(self, tile))
 
-    def possible_hold_order(self):
-        return [hold(self)]
+                # There is a fleet unit which means we can convoy
+                if self.is_fleet and sup_unit.is_fleet:
+                    orders.add(convoy(self, tile))
+            else:
+                orders.add(move(self, tile))
+
+        return orders
 
     def reachable_tiles(self, convoy_=False) -> Set[Province]:
         """ Compute all the reachable tiles for a given unit. This take into account all the adjacent land tiles
@@ -59,34 +76,17 @@ class Unit:
 
     @property
     def is_fleet(self):
-        return NotImplementedError
+        return self.unit_type == UnitType.Fleet
 
 
 class Army(Unit):
 
     def __init__(self, loc: Province, owner: Player, board: 'Board'):
         super().__init__(loc, owner, board)
-
-    @property
-    def is_feet(self):
-        return False
+        self.unit_type = UnitType.Army
 
     def __repr__(self):
         return 'A {}'.format(self.loc.id.name)
-
-    def convoy_orders(self) -> List[Order]:
-        """ An army can convoy if a fleet is on neighbouring water tile"""
-        if len(self.loc.coasts) == 0:
-            return []
-
-        raise NotImplementedError
-
-    def possible_attack_order(self):
-        """ Move an army to an adjacent `land` tile """
-        raise NotImplementedError
-
-    def possible_support_order(self):
-        raise NotImplementedError
 
 
 class Fleet(Unit):
@@ -94,28 +94,13 @@ class Fleet(Unit):
     def __init__(self, loc: Province, owner: Player, board: 'Board'):
         super().__init__(loc, owner, board)
         self.origin_sea = loc
-
-    @property
-    def is_fleet(self):
-        return True
+        self.unit_type = UnitType.Fleet
 
     def __repr__(self):
         return 'F {}'.format(self.loc.id.name)
 
-    def possible_attack_order(self):
-        """ Move a fleet to an adjacent `water` tile or `land` tile with a coast"""
-
-        raise NotImplementedError
-
-    def possible_support_order(self):
-        raise NotImplementedError
-
-    def possible_convoy_order(self):
-        """ convoy order is only available for fleets, Army just use the move order """
-        raise NotImplementedError
-
     def reachable_tiles(self, convoy_=False) -> Set[Province]:
-        """ fleets can reach every tile that are adjacent"""
+        """ fleets can reach every tile that are adjacent """
 
         if not convoy_:
             return self.loc.neighbours
@@ -124,8 +109,11 @@ class Fleet(Unit):
 
 
 def make_unit(type: UnitType, loc: Province, owner: Player, board: 'Board') -> Unit:
+    """ Unit Factory """
+
     if type == UnitType.Fleet:
         return Fleet(loc, owner, board)
+
     return Army(loc, owner, board)
 
 
@@ -137,8 +125,8 @@ if __name__ == '__main__':
     players = [Player(), Player()]
     board = Board(Diplomacy1901(), players)
 
-    print('=' * 80)
-    for i in range(1, 20):
+    print('=' * 75)
+    for i in range(1, 76):
 
         tile = board.get_tile_by_id(i)
 
@@ -157,12 +145,35 @@ if __name__ == '__main__':
         assert len(board.units) == 0
 
     # -------------------------------------------------------------------------------
+
+
+
+
+
+
     print('=' * 80)
     a1 = board.add_unit(UnitType.Army, board.get_tile_by_name('NOR'), players[0])
-
     print(a1, a1.reachable_tiles())
     f1 = board.add_unit(UnitType.Fleet, board.get_tile_by_name('NTH'), players[0])
     print(a1, a1.reachable_tiles())
+
+    print('-' * 10)
+    print(a1.get_possible_order())
+
+    from diplomacy.engine.game import Game
+
+    game = Game()
+    #game.clear_units()
+    #game.set_units('TURKEY', ['A NOR', 'F NTH'])
+
+    orders = []
+
+    for key, value in game.get_all_possible_orders().items():
+        orders.extend(value)
+
+    for i in range(0, len(orders) // 3):
+
+        print('{:4d} {:>30} {:>30} {:>30}'.format(i, orders[i * 3], orders[i * 3 + 1], orders[i * 3 + 2]))
 
     board.disband(a1)
     board.disband(f1)
