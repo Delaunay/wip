@@ -1,5 +1,0 @@
-
-
-class Power:
-    units = []
-    tiles = []
