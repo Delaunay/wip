@@ -6,7 +6,7 @@ from dgame.order import MOVE
 from dgame.diplomacy_europe_1901 import Diplomacy1901
 
 from enum import IntEnum, unique
-from typing import Set
+from typing import Set, List
 
 
 @unique
@@ -49,30 +49,41 @@ class Unit:
                 other_orders = orders_per_location.get(tile)
 
             sup_unit = self.board.get_unit_at(tile)
-            orders.add(move(self, dest=tile))
+
+            # no unit so we can move right away
+            if sup_unit is None:
+                orders.add(move(self, dest=tile))
 
             if sup_unit is not None:
                 orders.add(support(self, target=sup_unit))
 
-                # There is a fleet unit which means we can convoy
+                # There is a fleet unit which means we can convoy to a destination
                 if not self.is_fleet and sup_unit.is_fleet:
-                    orders.add(convoy(sup_unit, target=self, dest=tile))
-                    orders.add(convoy_move(self, dest=tile))
+
+                    # do not convoy to an adjacent tile (why take the boat if you can walk to it?)
+                    if sup_unit.loc is not tile:
+                        orders.add(convoy(sup_unit, target=self, dest=tile))
+                        orders.add(convoy_move(self, dest=tile))
+                    else:
+                        orders.add(move(self, dest=tile))
 
             # Some unit might be able to attack to the neighbouring tile
             # so we can also support them
             if other_orders is not None:
                 for order in other_orders:
 
-                    # we can support the attack move
-                    if order.order == MOVE and order.unit is not self and order.dest is not self.loc:
+                    # we can support the attack move iff we can also move to it
+                    if order.order == MOVE and order.unit is not self and order.dest in self.loc.neighbours:
                         orders.add(support_move(unit=self, target=order.unit, dest=order.dest))
 
         return orders
 
-    def reachable_tiles(self, convoy_=False) -> Set[Province]:
-        """ Compute all the reachable tiles for a given unit. This take into account all the adjacent land tiles
-                    and all the land tiles accessible through convoys """
+    def reachable_tiles(self):
+        return self._reachable_tiles(False, [])
+
+    def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
+        """ Compute all the reachable tiles for a given unit.
+            This take into account all the adjacent land tiles and all the land tiles accessible through convoys """
         reachable = set()
 
         # For each tile check if they are accessible
@@ -85,7 +96,8 @@ class Unit:
 
                 if unit is not None and unit.is_fleet:
                     # There is a fleet on the tile so we might be able to convoy though fleet chains
-                    reachable = reachable.union(unit.reachable_tiles(convoy_=True))
+                    path.append(self.loc)
+                    reachable = reachable.union(unit._reachable_tiles(convoy_=True, path=path))
             else:
                 reachable.add(tile)
 
@@ -118,7 +130,7 @@ class Fleet(Unit):
     def __repr__(self):
         return 'F {}'.format(self.loc.id.name)
 
-    def reachable_tiles(self, convoy_=False) -> Set[Province]:
+    def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
         """ fleets can reach every tile that are adjacent """
 
         if not convoy_:
@@ -128,12 +140,14 @@ class Fleet(Unit):
             for tile_id in self.loc.neighbours:
                 tile = self.board.get_tile_by_id(tile_id)
 
-                if tile.is_water:
+                if tile.is_water and tile not in path:
                     reachable.add(tile)
 
+            reachable.discard(self.loc)
             return reachable
 
-        return super().reachable_tiles(convoy_=True)
+        path.append(self.loc)
+        return super()._reachable_tiles(convoy_=True, path=path)
 
 
 def make_unit(type: UnitType, loc: Province, owner: Player = None, board: 'Board' = None) -> Unit:
