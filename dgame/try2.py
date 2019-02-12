@@ -45,8 +45,13 @@ DISBAND = OrderTypes.Disband
 WAIVE = OrderTypes.Waive
 
 
-class Unit(namedtuple('Unit', 'type loc')):
+class Unit:
     """  A unit is a type, location tuple """
+
+    def __init__(self, type: chr, loc: str, owner: str = None):
+        self.type = type
+        self.loc = loc
+        self.owner = owner
     
     def __repr__(self):
         return '{} {}'.format(self.type, self.loc)
@@ -63,24 +68,28 @@ class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target'])):
     """
 
     def __repr__(self):
-        if self.order == HOLD:
-            return '\'{} H\''.format(self.unit)
-        if self.order == SUPPORT:
-            return '\'{} S {}\''.format(self.unit, self.target)
-        if self.order == MOVE:
-            return '\'{} - {}\''.format(self.unit, self.dest)
-        if self.order == CONVOY_MOVE:
-            return '\'{} - {} VIA\''.format(self.unit, self.dest)
-        if self.order == CONVOY:
-            return '\'{} C {} - {}\''.format(self.unit, self.target, self.dest)
-        if self.order == RETREAT:
-            return '\'{} R {}\''.format(self.unit, self.dest)
-        if self.order == BUILD:
-            return '\'{} B\''.format(self.unit)
-        if self.order == DISBAND:
-            return '\'{} D\''.format(self.unit)
-        if self.order == WAIVE:
-            return '\'WAIVE\''
+        if self.order is HOLD:
+            return '{} H'.format(self.unit)
+        if self.order is SUPPORT:
+            return '{} S {}'.format(self.unit, self.target)
+        if self.order is SUPPORT_MOVE:
+            return '{} S {} - {}'.format(self.unit, self.target, self.dest)
+        if self.order is MOVE:
+            return '{} - {}'.format(self.unit, self.dest)
+        if self.order is CONVOY_MOVE:
+            return '{} - {} VIA'.format(self.unit, self.dest)
+        if self.order is CONVOY:
+            return '{} C {} - {}'.format(self.unit, self.target, self.dest)
+        if self.order is RETREAT:
+            return '{} R {}'.format(self.unit, self.dest)
+        if self.order is BUILD:
+            return '{} B'.format(self.unit)
+        if self.order is DISBAND:
+            return '{} D'.format(self.unit)
+        if self.order is WAIVE:
+            return 'WAIVE'
+
+        raise RuntimeError('Not an order')
 
 
 def hold(unit: Unit) -> Order:
@@ -128,14 +137,15 @@ def remove_duplicates(list_with_dup):
     return list(set(list_with_dup))
 
 
-class State:
-    phase_type = None
-    map = None
-    powers = None
-    rules = None
-    _abuts = None
+def get_unit_owner(game, unit: Unit) -> str:
+    if not isinstance(unit, Unit):
+        return game._unit_owner(unit)
 
-
+    if unit.owner is None:
+        # _unit_owner('A {}'.format(src)):
+        unit.owner = game._unit_owner(repr(unit))
+        
+    return unit.owner
 
 
 def get_all_possible_orders(self):
@@ -144,12 +154,12 @@ def get_all_possible_orders(self):
 
     for map_loc in self.map.locs:
         map_loc = map_loc.upper()
-        all_possible_orders[map_loc] = self.get_all_possible_orders_at(map_loc)
+        all_possible_orders[map_loc] = get_all_possible_orders_at(self, map_loc)
 
     return all_possible_orders
 
 
-def get_all_possible_orders_at(self: State, phase_type, loc):
+def get_all_possible_orders_at(self, loc):
     """ Computes a list of all possible orders for a unit in a given location
             :param loc: The location where to get a list of orders (must include coasts)
                     If not provided, returns a list of all possible orders for all locations
@@ -228,11 +238,11 @@ def get_all_possible_orders_at(self: State, phase_type, loc):
                 possible_orders += [move(unit, dest)]
 
             if self._abuts(unit_type, unit_loc, 'S', dest):
-                if self._unit_owner('A {}'.format(dest)):
+                if get_unit_owner(self, 'A {}'.format(dest)):
                     # '{} S A {}'.format(unit, dest)
                     possible_orders += [support(unit, Unit('A', dest))]
 
-                elif self._unit_owner('F {}'.format(dest)):
+                elif get_unit_owner(self, 'F {}'.format(dest)):
                     # '{} S F {}'.format(unit, dest)
                     possible_orders += [support(unit, Unit('F', dest))]
 
@@ -256,9 +266,9 @@ def get_all_possible_orders_at(self: State, phase_type, loc):
             for src in src_with_coasts:
 
                 # Checking if there is a unit on the src location
-                if self._unit_owner('A {}'.format(src)):
+                if get_unit_owner(self, 'A {}'.format(src)):
                     src_unit_type = 'A'
-                elif self._unit_owner('F {}'.format(src)):
+                elif get_unit_owner(self, 'F {}'.format(src)):
                     src_unit_type = 'F'
                 else:
                     continue
@@ -285,7 +295,7 @@ def get_all_possible_orders_at(self: State, phase_type, loc):
             for src in convoy_srcs:
 
                 # Checking if there is a unit on the src location
-                if unit_type == 'F' and self._unit_owner('A {}'.format(src)):
+                if unit_type == 'F' and get_unit_owner(self, 'A {}'.format(src)):
                     src_unit_type = 'A'
                 else:
                     continue
@@ -312,8 +322,8 @@ def get_all_possible_orders_at(self: State, phase_type, loc):
             retreat_locs = unit_power.retreats[unit]
             for dest in retreat_locs:
                 dest = dest.upper()
-                if not self._unit_owner('A {}'.format(dest[:3]), coast_required=0) \
-                        and not self._unit_owner('F {}'.format(dest[:3]), coast_required=0):
+                if not get_unit_owner(self, 'A {}'.format(dest[:3]), coast_required=0) \
+                        and not get_unit_owner(self, 'F {}'.format(dest[:3]), coast_required=0):
                     # '{} R {}'.format(unit, dest)
                     possible_orders += [retreat(unit, dest)]
 
@@ -329,8 +339,8 @@ def get_all_possible_orders_at(self: State, phase_type, loc):
         # Build Army / Fleet
         if build_count > 0 \
                 and loc[:3] in build_sites \
-                and not self._unit_owner('A ' + loc[:3], coast_required=0) \
-                and not self._unit_owner('F ' + loc[:3], coast_required=0):
+                and not get_unit_owner(self, 'A ' + loc[:3], coast_required=0) \
+                and not get_unit_owner(self, 'F ' + loc[:3], coast_required=0):
 
             if self.map.is_valid_unit('A {}'.format(loc)):
                 # 'A {} B'.format(loc)
@@ -346,4 +356,35 @@ def get_all_possible_orders_at(self: State, phase_type, loc):
 
     # Removing duplicate
     return remove_duplicates(possible_orders)
+
+
+if __name__ == '__main__':
+    from diplomacy.engine.game import Game
+    import timeit
+
+    game1 = Game()
+    game2 = Game()
+
+    avg_old = sum(timeit.repeat(game1.get_all_possible_orders, repeat=20, number=20)) / (10 * 10)
+    avg_new = sum(timeit.repeat(lambda: get_all_possible_orders(game2), repeat=20, number=20)) / (10 * 10)
+
+    print('avg_old {}'.format(avg_old))
+    print('avg_new {}'.format(avg_new))
+
+    print('-' * 80)
+    rold = game1.get_all_possible_orders()
+    rnew = get_all_possible_orders(game2)
+
+    for key in rold:
+        old = rold[key]
+        new = list(map(lambda x: repr(x), rnew[key]))
+
+        old.sort()
+        new.sort()
+
+        if set(old).difference(set(new)):
+            print(key, old, new)
+
+
+
 
