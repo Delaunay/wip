@@ -1,6 +1,8 @@
 from dgame.province import Province
 from dgame.power import Player
-from dgame.order import Order, move, hold, support, convoy
+from dgame.order import Order
+from dgame.order import move, hold, support, support_move, convoy, convoy_move, build, disband
+from dgame.order import MOVE
 from dgame.diplomacy_europe_1901 import Diplomacy1901
 
 from enum import IntEnum, unique
@@ -23,6 +25,10 @@ class UnitType(IntEnum):
         return 'A'
 
 
+ARMY = UnitType.Army
+FLEET = UnitType.Fleet
+
+
 class Unit:
     def __init__(self, loc: Province, owner: Player, board: 'Board'):
         self.loc = loc
@@ -30,21 +36,37 @@ class Unit:
         self.board = board
         self.unit_type = None
 
-    def get_possible_order(self) -> Set[Order]:
+    def get_possible_move_order(self, orders_per_location=None) -> Set[Order]:
+        """ All possible order during the move phase """
         tiles = self.reachable_tiles()
 
         orders = {hold(self)}
 
         for tile in tiles:
-            sup_unit = self.board.get_unit(tile)
+            other_orders = None
+
+            if orders_per_location is not None:
+                other_orders = orders_per_location.get(tile)
+
+            sup_unit = self.board.get_unit_at(tile)
+            orders.add(move(self, dest=tile))
+
             if sup_unit is not None:
-                orders.add(support(self, tile))
+                orders.add(support(self, target=sup_unit))
 
                 # There is a fleet unit which means we can convoy
-                if self.is_fleet and sup_unit.is_fleet:
-                    orders.add(convoy(self, tile))
-            else:
-                orders.add(move(self, tile))
+                if not self.is_fleet and sup_unit.is_fleet:
+                    orders.add(convoy(sup_unit, target=self, dest=tile))
+                    orders.add(convoy_move(self, dest=tile))
+
+            # Some unit might be able to attack to the neighbouring tile
+            # so we can also support them
+            if other_orders is not None:
+                for order in other_orders:
+
+                    # we can support the attack move
+                    if order.order == MOVE and order.unit is not self and order.dest is not self.loc:
+                        orders.add(support_move(unit=self, target=order.unit, dest=order.dest))
 
         return orders
 
@@ -59,7 +81,7 @@ class Unit:
             tile = self.board.get_tile_by_id(tile_id)
 
             if tile.is_water:
-                unit = self.board.get_unit(tile)
+                unit = self.board.get_unit_at(tile)
 
                 if unit is not None and unit.is_fleet:
                     # There is a fleet on the tile so we might be able to convoy though fleet chains
@@ -70,9 +92,6 @@ class Unit:
         # remove current location
         reachable.discard(self.loc)
         return reachable
-
-    def disband(self):
-        self.owner.units.remove(self)
 
     @property
     def is_fleet(self):
@@ -103,13 +122,28 @@ class Fleet(Unit):
         """ fleets can reach every tile that are adjacent """
 
         if not convoy_:
-            return self.loc.neighbours
+            # return set(filter(lambda x: self.board.get_tile_by_id(x).is_water, self.loc.neighbours))
+            reachable = set()
+
+            for tile_id in self.loc.neighbours:
+                tile = self.board.get_tile_by_id(tile_id)
+
+                if tile.is_water:
+                    reachable.add(tile)
+
+            return reachable
 
         return super().reachable_tiles(convoy_=True)
 
 
-def make_unit(type: UnitType, loc: Province, owner: Player, board: 'Board') -> Unit:
+def make_unit(type: UnitType, loc: Province, owner: Player = None, board: 'Board' = None) -> Unit:
     """ Unit Factory """
+
+    if type == 'A':
+        return Army(loc, owner, board)
+
+    if type == 'F':
+        return Fleet(loc, owner, board)
 
     if type == UnitType.Fleet:
         return Fleet(loc, owner, board)
@@ -117,12 +151,29 @@ def make_unit(type: UnitType, loc: Province, owner: Player, board: 'Board') -> U
     return Army(loc, owner, board)
 
 
+def get_all_possible_move_orders(board):
+    other_orders = {}
+
+    for unit in board.units():
+        other_orders[unit.loc] = unit.get_possible_move_order(other_orders)
+
+    return other_orders
+
+
 if __name__ == '__main__':
     from dgame.board import Board
     import sys
     sys.stderr = sys.stdout
 
-    players = [Player(), Player()]
+    austria = Player('Austria')
+    england = Player('England')
+    france = Player('France')
+    germany = Player('Germany')
+    italy = Player('Italy')
+    russia = Player('Russia')
+    turkey = Player('Turkey')
+
+    players = [austria, england, france, germany, italy, russia, turkey]
     board = Board(Diplomacy1901(), players)
 
     print('=' * 75)
@@ -130,35 +181,35 @@ if __name__ == '__main__':
 
         tile = board.get_tile_by_id(i)
 
-        unittype = UnitType.Army
+        unittype = ARMY
         if tile.is_water:
-            unittype = UnitType.Fleet
+            unittype = FLEET
 
-        unit = board.add_unit(unittype, tile, players[0])
+        # unit = board.build_unit(players[0], unittype, tile, )
+        unit = board.process_order(austria, build(make_unit(unittype, tile)))
 
         print(i, unit, unit.reachable_tiles(), ' == ', board.get_tile_by_id(i).neighbours)
 
-        board.disband(unit)
+        board.process_order(austria, disband(unit))
 
         assert len(players[0].units) == 0
-        assert len(board.loc_unit) == 0
-        assert len(board.units) == 0
+        assert len(board._loc_unit) == 0
+        assert len(board.units()) == 0
 
     # -------------------------------------------------------------------------------
 
 
-
-
-
-
     print('=' * 80)
-    a1 = board.add_unit(UnitType.Army, board.get_tile_by_name('NOR'), players[0])
+
+    a1 = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('NOR'))))
     print(a1, a1.reachable_tiles())
-    f1 = board.add_unit(UnitType.Fleet, board.get_tile_by_name('NTH'), players[0])
+
+    f1 = board.process_order(austria, build(make_unit(FLEET, board.get_tile_by_name('NTH'))))
+
     print(a1, a1.reachable_tiles())
 
     print('-' * 10)
-    print(a1.get_possible_order())
+    print(a1.get_possible_move_order())
 
     from diplomacy.engine.game import Game
 
@@ -172,18 +223,71 @@ if __name__ == '__main__':
         orders.extend(value)
 
     for i in range(0, len(orders) // 3):
-
         print('{:4d} {:>30} {:>30} {:>30}'.format(i, orders[i * 3], orders[i * 3 + 1], orders[i * 3 + 2]))
 
-    board.disband(a1)
-    board.disband(f1)
+    board.process_order(players[0], disband(a1))
+    board.process_order(players[0], disband(f1))
 
     assert len(players[0].units) == 0
-    assert len(board.loc_unit) == 0
-    assert len(board.units) == 0
+    assert len(board._loc_unit) == 0
+    assert len(board.units()) == 0
 
-    board.add_unit(UnitType.Fleet, board.get_tile_by_name('NOR'), players[0])
+    # board.add_unit(UnitType.Fleet, board.get_tile_by_name('NOR'), players[0])
 
+    bud = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('BUD'))))
+    board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('VIE'))))
+    board.process_order(austria, build(make_unit(FLEET, board.get_tile_by_name('TRI'))))
 
+    board.process_order(england, build(make_unit(ARMY, board.get_tile_by_name('LVP'))))
+    board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('LON'))))
+    board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('EDI'))))
 
+    board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('MAR'))))
+    board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('PAR'))))
+    board.process_order(france, build(make_unit(FLEET, board.get_tile_by_name('BRE'))))
+
+    board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('MUN'))))
+    board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('BER'))))
+    board.process_order(germany, build(make_unit(FLEET, board.get_tile_by_name('KIE'))))
+
+    board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('ROM'))))
+    board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('VEN'))))
+    board.process_order(italy, build(make_unit(FLEET, board.get_tile_by_name('NAP'))))
+
+    board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('WAR'))))
+    board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('MOS'))))
+    board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('SEV'))))
+    board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('STP'))))
+
+    board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('CON'))))
+    board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('SMY'))))
+    board.process_order(turkey, build(make_unit(FLEET, board.get_tile_by_name('ANK'))))
+
+    other_orders = {}
+    for unit in board.units():
+        other_orders[unit.loc] = unit.get_possible_move_order(other_orders)
+
+    new = list(map(lambda x: repr(x), bud.get_possible_move_order(other_orders)))
+    new.sort()
+
+    old = game.get_all_possible_orders('BUD')
+    old.sort()
+
+    print('-' * 80)
+    print(other_orders)
+    print('-' * 80)
+    print(board.get_tile_by_name('BUD').neighbours)
+    print(new)
+    print(old)
+    print('-' * 80)
+    print(set(new).difference(set(old)))
+
+    import timeit
+
+    avg_old = sum(timeit.repeat(game.get_all_possible_orders, repeat=20, number=20)) / (10 * 10)
+    avg_new = sum(timeit.repeat(lambda: get_all_possible_move_orders(board), repeat=20, number=20)) / (10 * 10)
+
+    print('avg_old {}'.format(avg_old))
+    print('avg_new {}'.format(avg_new))
+    print('Speedup {}'.format(avg_old / avg_new))
 

@@ -15,126 +15,29 @@
 
 """
 
-from enum import IntEnum, unique
-from collections import namedtuple
+
+from dgame.order import *
+#from dgame.unit import Unit
 
 
-@unique
-class OrderTypes(IntEnum):
-    Hold = 0
-    Move = 1
-    ConvoyMove = 2
-    Convoy = 3
-    Support = 4
-    SupportMove = 5
-    Retreat = 6
-    Disband = 7
-    Build = 8
-    Waive = 9
-
-
-HOLD = OrderTypes.Hold
-MOVE = OrderTypes.Move
-CONVOY = OrderTypes.Convoy
-CONVOY_MOVE = OrderTypes.ConvoyMove
-SUPPORT = OrderTypes.Support
-SUPPORT_MOVE = OrderTypes.SupportMove
-RETREAT = OrderTypes.Retreat
-BUILD = OrderTypes.Build
-DISBAND = OrderTypes.Disband
-WAIVE = OrderTypes.Waive
-
-
+#@jitclass([('type', string), ('loc', string), ('owner', optional(string))])
 class Unit:
     """  A unit is a type, location tuple """
 
     def __init__(self, type: chr, loc: str, owner: str = None):
-        self.type = type
-        self.loc = loc
-        self.owner = owner
-    
+        self.type: chr = type
+        self.loc: str = loc
+        self.owner: str = owner
+
     def __repr__(self):
         return '{} {}'.format(self.type, self.loc)
 
 
-class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target'])):
-    """
-        order: order type
-        unit: unit type doing the order
-        src: original location of the unit
-        dest: location of the unit target OR destination fo the unit doing the order
-        target: unit type of the unit on dest
-        target_src
-    """
-
-    def __repr__(self):
-        if self.order is HOLD:
-            return '{} H'.format(self.unit)
-        if self.order is SUPPORT:
-            return '{} S {}'.format(self.unit, self.target)
-        if self.order is SUPPORT_MOVE:
-            return '{} S {} - {}'.format(self.unit, self.target, self.dest)
-        if self.order is MOVE:
-            return '{} - {}'.format(self.unit, self.dest)
-        if self.order is CONVOY_MOVE:
-            return '{} - {} VIA'.format(self.unit, self.dest)
-        if self.order is CONVOY:
-            return '{} C {} - {}'.format(self.unit, self.target, self.dest)
-        if self.order is RETREAT:
-            return '{} R {}'.format(self.unit, self.dest)
-        if self.order is BUILD:
-            return '{} B'.format(self.unit)
-        if self.order is DISBAND:
-            return '{} D'.format(self.unit)
-        if self.order is WAIVE:
-            return 'WAIVE'
-
-        raise RuntimeError('Not an order')
-
-
-def hold(unit: Unit) -> Order:
-    return Order(order=HOLD, unit=unit, dest=None, target=None)
-
-
-def move(unit: Unit, dest: str) -> Order:
-    return Order(order=MOVE, unit=unit, dest=dest, target=None)
-
-
-def convoy_move(unit: Unit, dest: str) -> Order:
-    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=None)
-
-
-def convoy(unit: Unit, target: Unit, dest: str) -> Order:
-    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=target)
-
-
-def support(unit: Unit, target: Unit) -> Order:
-    return Order(order=SUPPORT, unit=unit, dest=None, target=target)
-
-
-def support_move(unit: Unit, target: Unit, dest: str) -> Order:
-    return Order(order=SUPPORT_MOVE, unit=unit, dest=dest, target=target)
-
-
-def retreat(unit: Unit, dest: str) -> Order:
-    return Order(order=RETREAT, unit=unit, dest=dest, target=None)
-
-
-def disband(unit: Unit) -> Order:
-    return Order(order=DISBAND, unit=unit, dest=None, target=None)
-
-
-def build(unit: Unit) -> Order:
-    return Order(order=BUILD, unit=unit, dest=None, target=None)
-
-
-def waive() -> Order:
-    return Order(order=WAIVE, unit=None, dest=None, target=None)
-
-
+#@jit
 def remove_duplicates(list_with_dup):
     """ Shorthand functions to remove duplicates """
     return list(set(list_with_dup))
+    # return list_with_dup
 
 
 def get_unit_owner(game, unit: Unit) -> str:
@@ -148,6 +51,7 @@ def get_unit_owner(game, unit: Unit) -> str:
     return unit.owner
 
 
+#@jit
 def get_all_possible_orders(self):
     """  :return: a list of possible orders for all locations if no locations are provided. """
     all_possible_orders = {}
@@ -159,6 +63,7 @@ def get_all_possible_orders(self):
     return all_possible_orders
 
 
+#@jit
 def get_all_possible_orders_at(self, loc):
     """ Computes a list of all possible orders for a unit in a given location
             :param loc: The location where to get a list of orders (must include coasts)
@@ -217,14 +122,16 @@ def get_all_possible_orders_at(self, loc):
     unit_type = unit[0] if unit else ''
     unit_loc = unit[2:] if unit else ''
 
-    unit = Unit(type=unit_type, loc=unit_loc)
+    unit = Unit(type=unit_type, loc=unit_loc, owner=None)
 
     # Movement phase
     if self.phase_type == 'M':
         # Computing coasts for dest
         dest_1_hops = [l.upper() for l in self.map.abut_list(unit_loc, incl_no_coast=True)]
+
         dest_with_coasts = [self.map.find_coasts(dest) for dest in dest_1_hops]
-        dest_with_coasts = {val for sublist in dest_with_coasts for val in sublist}
+
+        dest_with_coasts = set([val for sublist in dest_with_coasts for val in sublist])
 
         # Hold
         # '{} H'.format(unit)
@@ -240,11 +147,11 @@ def get_all_possible_orders_at(self, loc):
             if self._abuts(unit_type, unit_loc, 'S', dest):
                 if get_unit_owner(self, 'A {}'.format(dest)):
                     # '{} S A {}'.format(unit, dest)
-                    possible_orders += [support(unit, Unit('A', dest))]
+                    possible_orders += [support(unit, Unit('A', dest, None))]
 
                 elif get_unit_owner(self, 'F {}'.format(dest)):
                     # '{} S F {}'.format(unit, dest)
-                    possible_orders += [support(unit, Unit('F', dest))]
+                    possible_orders += [support(unit, Unit('F', dest, None))]
 
         # Move Via Convoy
         for dest in self._get_convoy_destinations(unit_type, unit_loc):
@@ -282,12 +189,12 @@ def get_all_possible_orders_at(self, loc):
 
                     # Adding with coast
                     # '{} S {} {} - {}'.format(unit, src_unit_type, src, dest)
-                    possible_orders += [support_move(unit, Unit(src_unit_type, src), dest)]
+                    possible_orders += [support_move(unit, Unit(src_unit_type, src, None), dest)]
 
                     # Adding without coasts
                     if '/' in dest:
                         # '{} S {} {} - {}'.format(unit, src_unit_type, src, dest[:3])
-                        possible_orders += [support_move(unit, Unit(src_unit_type, src), dest[:3])]
+                        possible_orders += [support_move(unit, Unit(src_unit_type, src, None), dest[:3])]
 
         # Convoy
         if unit_type == 'F':
@@ -307,7 +214,7 @@ def get_all_possible_orders_at(self, loc):
                 for dest in convoy_dests:
                     if self._has_convoy_path(src_unit_type, src, dest, convoying_loc=unit_loc):
                         # '{} C {} {} - {}'.format(unit, src_unit_type, src, dest)
-                        possible_orders += [convoy(unit, Unit(src_unit_type, src), dest)]
+                        possible_orders += [convoy(unit, Unit(src_unit_type, src, None), dest)]
 
     # Retreat phase
     if self.phase_type == 'R':
@@ -374,6 +281,8 @@ if __name__ == '__main__':
     print('-' * 80)
     rold = game1.get_all_possible_orders()
     rnew = get_all_possible_orders(game2)
+
+    print(rold)
 
     for key in rold:
         old = rold[key]

@@ -14,9 +14,6 @@ class Province:
         self.coasts = coastal                   # number of neighbouring Sea Tiles
 
     def __repr__(self):
-        return self.id.name
-
-    def __str__(self):
         return '{}(id={}, supply={}, water={}, home={}, coasts={}, {})'.format(
             self.id.name,
             self.id.value,
@@ -25,6 +22,9 @@ class Province:
             self.is_home_center,
             self.coasts,
             self.neighbours)
+
+    def __str__(self):
+        return self.id.name
 
     @property
     def name(self):

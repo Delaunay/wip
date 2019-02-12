@@ -11,12 +11,18 @@
 6. A IRO R MAO                 Retreat
 7. A IRO D                     Disband
 8. A LON B                     Build
+9. WAIVE
 
 """
 
 from enum import IntEnum, unique
+from collections import namedtuple
+from typing import TypeVar
+
 from dgame.province import Province
 
+# Circular reference in between modules
+Unit = TypeVar('Unit')
 
 @unique
 class OrderTypes(IntEnum):
@@ -29,6 +35,7 @@ class OrderTypes(IntEnum):
     Retreat = 6
     Disband = 7
     Build = 8
+    Waive = 9
 
 
 HOLD = OrderTypes.Hold
@@ -40,50 +47,79 @@ SUPPORT_MOVE = OrderTypes.SupportMove
 RETREAT = OrderTypes.Retreat
 BUILD = OrderTypes.Build
 DISBAND = OrderTypes.Disband
+WAIVE = OrderTypes.Waive
 
 
-class Order:
-    order_type: OrderTypes = None
-    unit: 'Unit' = None
-    dest: Province = None
-
-    def __init__(self,order, unit, dest=None):
-        self.order_type = order
-        self.unit = unit
-        self.dest = dest
+class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target'])):
+    """
+        order: order type
+        unit: unit type doing the order
+        src: original location of the unit
+        dest: location of the unit target OR destination fo the unit doing the order
+        target: unit type of the unit on dest
+        target_src
+    """
 
     def __repr__(self):
-        if self.order_type == HOLD:
-            return '\'{} {} H\''.format(self.unit.unit_type, self.unit.loc.name)
-        if self.order_type == SUPPORT:
-            return '\'{} {} S {}\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
-        if self.order_type == MOVE:
-            return '\'{} {} - {}\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
-        if self.order_type == CONVOY_MOVE:
-            return '\'{} {} - {} VIA\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
-        if self.order_type == CONVOY:
-            return '\'{} {} C {}\''.format(self.unit.unit_type, self.unit.loc.name)
-        if self.order_type == RETREAT:
-            return '\'{} {} R {}\''.format(self.unit.unit_type, self.unit.loc.name, self.dest.name)
-        if self.order_type == BUILD:
-            return '\'{} {} B\''.format(self.unit.unit_type, self.unit.loc.name)
-        if self.order_type == DISBAND:
-            return '\'{} {} D\''.format(self.unit.unit_type, self.unit.loc.name)
+        if self.order is HOLD:
+            return '{} H'.format(self.unit)
+        if self.order is SUPPORT:
+            return '{} S {}'.format(self.unit, self.target)
+        if self.order is SUPPORT_MOVE:
+            return '{} S {} - {}'.format(self.unit, self.target, self.dest)
+        if self.order is MOVE:
+            return '{} - {}'.format(self.unit, self.dest)
+        if self.order is CONVOY_MOVE:
+            return '{} - {} VIA'.format(self.unit, self.dest)
+        if self.order is CONVOY:
+            return '{} C {} - {}'.format(self.unit, self.target, self.dest)
+        if self.order is RETREAT:
+            return '{} R {}'.format(self.unit, self.dest)
+        if self.order is BUILD:
+            return '{} B'.format(self.unit)
+        if self.order is DISBAND:
+            return '{} D'.format(self.unit)
+        if self.order is WAIVE:
+            return 'WAIVE'
+
+        raise RuntimeError('Not an order')
 
 
-def hold(unit: 'Unit'):
-    return Order(OrderTypes.Hold, unit)
+def hold(unit: Unit) -> Order:
+    return Order(order=HOLD, unit=unit, dest=None, target=None)
 
 
-def move(unit: 'Unit', dest: Province):
-    return Order(OrderTypes.Move, unit, dest)
+def move(unit: Unit, dest: Province) -> Order:
+    return Order(order=MOVE, unit=unit, dest=dest, target=None)
 
 
-def convoy(unit: 'Unit', dest: Province):
-    return Order(OrderTypes.Convoy, unit, dest)
+def convoy_move(unit: Unit, dest: Province) -> Order:
+    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=None)
 
 
-def support(unit: 'Unit', dest: Province):
-    return Order(OrderTypes.Support, unit, dest)
+def convoy(unit: Unit, target: Unit, dest: Province) -> Order:
+    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=target)
 
 
+def support(unit: Unit, target: Unit) -> Order:
+    return Order(order=SUPPORT, unit=unit, dest=None, target=target)
+
+
+def support_move(unit: Unit, target: Unit, dest: Province) -> Order:
+    return Order(order=SUPPORT_MOVE, unit=unit, dest=dest, target=target)
+
+
+def retreat(unit: Unit, dest: Province) -> Order:
+    return Order(order=RETREAT, unit=unit, dest=dest, target=None)
+
+
+def disband(unit: Unit) -> Order:
+    return Order(order=DISBAND, unit=unit, dest=None, target=None)
+
+
+def build(unit: Unit) -> Order:
+    return Order(order=BUILD, unit=unit, dest=None, target=None)
+
+
+def waive() -> Order:
+    return Order(order=WAIVE, unit=None, dest=None, target=None)
