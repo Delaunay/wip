@@ -10,7 +10,7 @@
 
 from enum import auto, IntEnum, unique
 from dgame.province import Province
-from dgame.definition import BoardDefinition
+from dgame.definition import AbstractBoardDefinition
 
 
 def make_adjacency_list(SUPPLY_CENTERS, WATER_TILES, adjacency_map, Provinces, HOME_SUPPLY_CENTERS):
@@ -21,15 +21,18 @@ def make_adjacency_list(SUPPLY_CENTERS, WATER_TILES, adjacency_map, Provinces, H
     """
 
     return tuple(Province(
-        pid=item,
+        pid=item.value,
+        name=item.name,
+        short=item.name,
         supply_center=item in SUPPLY_CENTERS,
         water=item in WATER_TILES,
         home_center=item in HOME_SUPPLY_CENTERS,
         coastal=[item for item in adjacency_map[item.value] if item in WATER_TILES],
+        without_coast=item.value,
         neighbours=adjacency_map[item.value]) for item in list(Provinces))
 
 
-class Diplomacy1901(BoardDefinition):
+class Diplomacy1901(AbstractBoardDefinition):
     @unique
     class Powers(IntEnum):
         AustriaHungary = auto()
@@ -243,8 +246,8 @@ class Diplomacy1901(BoardDefinition):
         ALB: (GRE, ION, ADR, TRI),
         SER: (GRE, ALB, BUL, RUM, TRI, BUD),
         RUM: (SEV, BLA, BUL),
-        CON: (SMY, ANK, AEG, BLA, BUL, BUL),
-        SMY: (CON, SYR, AEG, EAS),
+        CON: (SMY, ANK, AEG, BLA, BUL),
+        SMY: (CON, SYR, AEG, EAS, ANK),
         ANK: (CON, ARM, BLA),
         ARM: (ANK, SEV, BLA),
         SYR: (SMY, EAS),

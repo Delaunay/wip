@@ -4,19 +4,22 @@ from enum import Enum
 
 class Province:
 
-    def __init__(self, pid: Enum, supply_center: bool, water: bool, home_center: bool, coastal: List['Province'],
-                 neighbours: List['Province']):
+    def __init__(self, pid: int, name: str, short: str, supply_center: bool, water: bool, home_center: bool, coastal: List[int],
+                 without_coast: int, neighbours: List[int]):
         self.id = pid
+        self.short = short
+        self.name = name
         self.neighbours = neighbours            # all neighbouring tiles
         self.is_supply_center = supply_center   # is a supply center
         self.is_water = water                   # is a water tile
         self.is_home_center = home_center       # is a home supply center tile
+        self.without_coast = without_coast      # index pointing to the tile without the coast component
         self.coasts = coastal                   # number of neighbouring Sea Tiles
 
     def __repr__(self):
         return '{}(id={}, supply={}, water={}, home={}, coasts={}, {})'.format(
-            self.id.name,
-            self.id.value,
+            self.short,
+            self.id,
             self.is_supply_center,
             self.is_water,
             self.is_home_center,
@@ -24,11 +27,6 @@ class Province:
             self.neighbours)
 
     def __str__(self):
-        return self.id.name
-
-    @property
-    def name(self):
-        return self.id.name
-
+        return self.short
 
 

@@ -2,7 +2,7 @@ from dgame.power import Player
 from dgame.province import Province
 
 from dgame.unit import Unit, make_unit
-from dgame.definition import BoardDefinition
+from dgame.definition import AbstractBoardDefinition
 
 from dgame.order import Order
 from dgame.order import HOLD, MOVE, CONVOY, CONVOY_MOVE, SUPPORT_MOVE, SUPPORT, RETREAT, BUILD, DISBAND, WAIVE
@@ -18,7 +18,7 @@ class Board:
         All orders should go through this.
     """
 
-    def __init__(self, board_definition: BoardDefinition, players: List[Player]):
+    def __init__(self, board_definition: AbstractBoardDefinition, players: List[Player]):
         self._definition = board_definition
         self._players = players
         self._units = set()
@@ -83,7 +83,7 @@ class Board:
     def support(self, player: Player, order: Order):
         pass
 
-    def support_move(self,player: Player, order: Order):
+    def support_move(self, player: Player, order: Order):
         pass
 
     def retreat_unit(self, player: Player, order: Order):

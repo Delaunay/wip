@@ -35,27 +35,52 @@ class Unit:
         self.owner = owner
         self.board = board
         self.unit_type = None
+        self._reachable_tiles_cache = None
 
-    def get_possible_move_order(self, orders_per_location=None) -> Set[Order]:
+    def get_possible_move_order(self, orders_per_location=None, move_orders=None) -> Set[Order]:
         """ All possible order during the move phase """
         tiles = self.reachable_tiles()
 
         orders = {hold(self)}
 
-        for tile in tiles:
-            other_orders = None
+        if move_orders is None:
+            move_orders = {}
 
-            if orders_per_location is not None:
-                other_orders = orders_per_location.get(tile)
+        def move_unit(unit: Unit, dest: Province):
+            order = move(unit, dest=dest)
+            orders.add(order)
+
+            if tile not in move_orders:
+                move_orders[tile] = set()
+
+            move_orders[tile].add(order)
+
+        # first we establish where can a unit move
+        # then given that information we can check where multiple units can move to the same location and add the
+        # support move order
+
+        for tile in tiles:
+            #other_orders = None
+
+            #if orders_per_location is not None:
+            #    other_orders = orders_per_location.get(tile)
 
             sup_unit = self.board.get_unit_at(tile)
 
             # no unit so we can move right away
-            if sup_unit is None:
-                orders.add(move(self, dest=tile))
+            if sup_unit is None or not sup_unit.is_fleet:
+                move_unit(self, tile)
 
             if sup_unit is not None:
                 orders.add(support(self, target=sup_unit))
+
+                # if both units can move into a tile then do a support_move
+                # common_tiles = set(tiles).intersection(sup_unit.reachable_tiles())
+                # common_tiles.discard(self.loc)
+                # common_tiles.discard(sup_unit.loc)
+
+                # for dest in common_tiles:
+                #    orders.add(support_move(self, sup_unit, dest))
 
                 # There is a fleet unit which means we can convoy to a destination
                 if not self.is_fleet and sup_unit.is_fleet:
@@ -65,21 +90,27 @@ class Unit:
                         orders.add(convoy(sup_unit, target=self, dest=tile))
                         orders.add(convoy_move(self, dest=tile))
                     else:
-                        orders.add(move(self, dest=tile))
+                        move_unit(self, tile)
 
-            # Some unit might be able to attack to the neighbouring tile
-            # so we can also support them
-            if other_orders is not None:
-                for order in other_orders:
-
-                    # we can support the attack move iff we can also move to it
-                    if order.order == MOVE and order.unit is not self and order.dest in self.loc.neighbours:
-                        orders.add(support_move(unit=self, target=order.unit, dest=order.dest))
+                # if a unit can move to the destination
+                # if other_orders is not None:
+                #     for order in other_orders:
+                #        # we can support the attack move iff we can also move to it
+                #        if order.order == MOVE and order.unit is not self and order.dest in self.loc.neighbours:
+                #            orders.add(support_move(unit=self, target=order.unit, dest=order.dest))
 
         return orders
 
     def reachable_tiles(self):
-        return self._reachable_tiles(False, [])
+        if self._reachable_tiles_cache is None:
+            self._reachable_tiles_cache = self._reachable_tiles(False, [])
+
+            # remove coasts BUL/EC, BUL/SC => BUL
+            if not self.is_fleet:
+                self._reachable_tiles_cache = set(
+                    map(lambda x: self.board.get_tile_by_id(x.without_coast), self._reachable_tiles_cache))
+
+        return self._reachable_tiles_cache
 
     def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
         """ Compute all the reachable tiles for a given unit.
@@ -117,7 +148,7 @@ class Army(Unit):
         self.unit_type = UnitType.Army
 
     def __repr__(self):
-        return 'A {}'.format(self.loc.id.name)
+        return 'A {}'.format(self.loc)
 
 
 class Fleet(Unit):
@@ -128,7 +159,7 @@ class Fleet(Unit):
         self.unit_type = UnitType.Fleet
 
     def __repr__(self):
-        return 'F {}'.format(self.loc.id.name)
+        return 'F {}'.format(self.loc)
 
     def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
         """ fleets can reach every tile that are adjacent """
@@ -167,28 +198,41 @@ def make_unit(type: UnitType, loc: Province, owner: Player = None, board: 'Board
 
 def get_all_possible_move_orders(board):
     other_orders = {}
+    move_orders = {}
 
     for unit in board.units():
-        other_orders[unit.loc] = unit.get_possible_move_order(other_orders)
+        other_orders[unit.loc] = unit.get_possible_move_order(other_orders, move_orders)
+
+    for dest, orders in move_orders.items():
+
+        for o1 in orders:
+            unit = o1.unit
+            corder = other_orders[unit.loc]
+
+            for o2 in orders:
+                if o1 is o2:
+                    continue
+
+                target = o2.unit
+                corder.add(support_move(unit, target=target, dest=dest))
 
     return other_orders
 
 
 if __name__ == '__main__':
     from dgame.board import Board
+    from dgame.definition import BoardDefinitionFile
     import sys
     sys.stderr = sys.stdout
 
-    austria = Player('Austria')
-    england = Player('England')
-    france = Player('France')
-    germany = Player('Germany')
-    italy = Player('Italy')
-    russia = Player('Russia')
-    turkey = Player('Turkey')
+    diplo_board = BoardDefinitionFile('/home/user1/diplomacy/diplomacy/maps/standard.map')
+    players = [
+        Player(p) for p in diplo_board.initial_condition()
+    ]
 
-    players = [austria, england, france, germany, italy, russia, turkey]
-    board = Board(Diplomacy1901(), players)
+    austria = players[0]
+
+    board = Board(diplo_board, players)
 
     print('=' * 75)
     for i in range(1, 76):
@@ -215,7 +259,7 @@ if __name__ == '__main__':
 
     print('=' * 80)
 
-    a1 = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('NOR'))))
+    a1 = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('NWY'))))
     print(a1, a1.reachable_tiles())
 
     f1 = board.process_order(austria, build(make_unit(FLEET, board.get_tile_by_name('NTH'))))
@@ -246,53 +290,64 @@ if __name__ == '__main__':
     assert len(board._loc_unit) == 0
     assert len(board.units()) == 0
 
+    orders = {}
+
+    for p in players:
+        power = p.power
+
+        for (tp, loc) in power[3]:
+            orders[loc] = board.process_order (p, build(make_unit(tp, board.get_tile_by_name(loc))))
+
     # board.add_unit(UnitType.Fleet, board.get_tile_by_name('NOR'), players[0])
 
-    bud = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('BUD'))))
-    board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('VIE'))))
-    board.process_order(austria, build(make_unit(FLEET, board.get_tile_by_name('TRI'))))
+    # bud = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('BUD'))))
+    # board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('VIE'))))
+    # board.process_order(austria, build(make_unit(FLEET, board.get_tile_by_name('TRI'))))
+    #
+    # board.process_order(england, build(make_unit(ARMY, board.get_tile_by_name('LVP'))))
+    # board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('LON'))))
+    # board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('EDI'))))
+    #
+    # board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('MAR'))))
+    # board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('PAR'))))
+    # board.process_order(france, build(make_unit(FLEET, board.get_tile_by_name('BRE'))))
+    #
+    # board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('MUN'))))
+    # board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('BER'))))
+    # board.process_order(germany, build(make_unit(FLEET, board.get_tile_by_name('KIE'))))
+    #
+    # board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('ROM'))))
+    # board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('VEN'))))
+    # board.process_order(italy, build(make_unit(FLEET, board.get_tile_by_name('NAP'))))
+    #
+    # board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('WAR'))))
+    # board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('MOS'))))
+    # board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('SEV'))))
+    # board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('STP'))))
+    #
+    # con = board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('CON'))))
+    # board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('SMY'))))
+    # board.process_order(turkey, build(make_unit(FLEET, board.get_tile_by_name('ANK'))))
 
-    board.process_order(england, build(make_unit(ARMY, board.get_tile_by_name('LVP'))))
-    board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('LON'))))
-    board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('EDI'))))
+    #other_orders = {}
+    #for unit in board.units():
+    #    other_orders[unit.loc] = unit.get_possible_move_order(other_orders)
 
-    board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('MAR'))))
-    board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('PAR'))))
-    board.process_order(france, build(make_unit(FLEET, board.get_tile_by_name('BRE'))))
+    #new = list(map(lambda x: repr(x), con.get_possible_move_order(other_orders)))
 
-    board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('MUN'))))
-    board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('BER'))))
-    board.process_order(germany, build(make_unit(FLEET, board.get_tile_by_name('KIE'))))
+    loc = 'MAR'
 
-    board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('ROM'))))
-    board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('VEN'))))
-    board.process_order(italy, build(make_unit(FLEET, board.get_tile_by_name('NAP'))))
-
-    board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('WAR'))))
-    board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('MOS'))))
-    board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('SEV'))))
-    board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('STP'))))
-
-    board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('CON'))))
-    board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('SMY'))))
-    board.process_order(turkey, build(make_unit(FLEET, board.get_tile_by_name('ANK'))))
-
-    other_orders = {}
-    for unit in board.units():
-        other_orders[unit.loc] = unit.get_possible_move_order(other_orders)
-
-    new = list(map(lambda x: repr(x), bud.get_possible_move_order(other_orders)))
+    new = get_all_possible_move_orders(board)[board.get_tile_by_name(loc)]
+    new = list(map(lambda x: str(x), new))
     new.sort()
 
-    old = game.get_all_possible_orders('BUD')
+    old = list(set(game.get_all_possible_orders()[loc]))
     old.sort()
 
     print('-' * 80)
-    print(other_orders)
-    print('-' * 80)
-    print(board.get_tile_by_name('BUD').neighbours)
-    print(new)
-    print(old)
+    print(board.get_tile_by_name(loc).neighbours)
+    print('new ', new)
+    print('old ', old)
     print('-' * 80)
     print(set(new).difference(set(old)))
 
@@ -304,4 +359,33 @@ if __name__ == '__main__':
     print('avg_old {}'.format(avg_old))
     print('avg_new {}'.format(avg_new))
     print('Speedup {}'.format(avg_old / avg_new))
+
+    print('-' * 80)
+    oldallr = game.get_all_possible_orders()
+    newallr = get_all_possible_move_orders(board)
+
+    oldallrall = []
+    newallrall = []
+
+    diff_n = 0
+
+    for (k, j) in newallr.items():
+
+        i = oldallr.get(str(k))
+
+        oldallrall.extend(i)
+        newallrall.extend(j)
+
+        old_set = set(i)
+        new_set = set(list(map(lambda x: repr(x), j)))
+        diff = old_set.difference(new_set)
+
+        if diff:
+            print(k, diff)
+            diff_n += len(diff)
+
+    print('-' * 80)
+    print('OLD: ', len(oldallrall))
+    print('NEW: ', len(newallrall))
+    print('Diff ', diff_n)
 
