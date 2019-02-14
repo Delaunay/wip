@@ -18,14 +18,13 @@ class Province:
         self.seas = seas
 
     def __repr__(self):
-        return '{}(id={}, supply={}, water={}, home={}, coasts={}, {})'.format(
+        return '{}(id={}, supply={}, water={}, home={}, coasts={}, -)'.format(
             self.short,
             self.id,
             self.is_supply_center,
             self.is_water,
             self.is_home_center,
-            self.coasts,
-            self.neighbours)
+            self.coasts)
 
     def __str__(self):
         return self.short

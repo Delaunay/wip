@@ -50,7 +50,7 @@ class Unit:
             order = move(unit, dest=dest)
             orders.add(order)
 
-            loc_nc = self.board.get_tile_by_id(tile.without_coast)
+            loc_nc = tile.without_coast
 
             if tile not in move_orders:
                 move_orders[loc_nc] = set()
@@ -88,8 +88,7 @@ class Unit:
 
             # remove coasts BUL/EC, BUL/SC => BUL
             if not self.is_fleet:
-                self._reachable_tiles_cache = set(
-                    map(lambda x: self.board.get_tile_by_id(x.without_coast), self._reachable_tiles_cache))
+                self._reachable_tiles_cache = set(map(lambda x: x.without_coast, self._reachable_tiles_cache))
 
         return self._reachable_tiles_cache
 
@@ -99,9 +98,7 @@ class Unit:
         reachable = set()
 
         # For each tile check if they are accessible
-        for tile_id in self.loc.neighbours:
-
-            tile = self.board.get_tile_by_id(tile_id)
+        for tile in self.loc.neighbours:
 
             if tile.is_water:
                 unit = self.board.get_unit_at(tile)
@@ -150,8 +147,7 @@ class Fleet(Unit):
             # return set(filter(lambda x: self.board.get_tile_by_id(x).is_water, self.loc.neighbours))
             reachable = set()
 
-            for tile_id in self.loc.neighbours:
-                tile = self.board.get_tile_by_id(tile_id)
+            for tile in self.loc.neighbours:
 
                 # for a tile to be reachable by a fleet it needs to be either water
                 # or a land tile with a common sea between current loc and dest loc
@@ -260,7 +256,35 @@ def test():
     assert len(board.units()) == 0
 
 
+def profile():
+    from dgame.board import Board
+    from dgame.definition import BoardDefinitionFile
+    from benchutils.call_graph import make_callgraph
+
+    diplo_board = BoardDefinitionFile('/home/user1/diplomacy/diplomacy/maps/standard.map')
+    players = [
+        Player(p) for p in diplo_board.initial_condition()
+    ]
+
+    austria = players[0]
+
+    board = Board(diplo_board, players)
+
+    orders = {}
+
+    for p in players:
+        power = p.power
+
+        for (tp, loc) in power[3]:
+            orders[loc] = board.process_order(p, build(make_unit(tp, board.get_tile_by_name(loc))))
+
+    with make_callgraph('get_all_new', id='1', dry_run=False):
+        get_all_possible_move_orders(board)
+
+
 if __name__ == '__main__':
+    profile()
+
     from dgame.board import Board
     from dgame.definition import BoardDefinitionFile
     import sys
@@ -274,6 +298,7 @@ if __name__ == '__main__':
     austria = players[0]
 
     board = Board(diplo_board, players)
+
 
 
     from diplomacy.engine.game import Game
@@ -363,4 +388,7 @@ if __name__ == '__main__':
     print('NEW: ', len(newallrall), new_tn)
     print('Diff ', diff_n)
     print('Diff', old_tn - new_tn)
+
+
+
 

@@ -50,7 +50,7 @@ class Board:
         unit.owner = player
         player.units.add(unit)
         self._units.add(unit)
-        self._loc_unit[self.get_tile_by_id(unit.loc.without_coast)] = unit
+        self._loc_unit[unit.loc.without_coast] = unit
         return unit
 
     # can throw if unit does not belong to player
@@ -68,7 +68,7 @@ class Board:
 
         self.__check_ownerships(player, unit, 'Cannot move')
 
-        self._loc_unit[self.get_tile_by_id(order.dest.without_coast)] = unit
+        self._loc_unit[order.dest.without_coast] = unit
         unit.loc = order.unit.dest
 
     def hold(self, player: Player, order: Order):
@@ -94,7 +94,7 @@ class Board:
 
     # Game State Query
     def get_unit_at(self, loc: Province) -> Optional[Unit]:
-        return self._loc_unit.get(self.get_tile_by_id(loc.without_coast))
+        return self._loc_unit.get(loc.without_coast)
 
     def get_tile_by_id(self, index: int) -> Province:
         return self._definition.PROVINCE_DB[index]

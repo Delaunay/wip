@@ -71,11 +71,18 @@ def make_database(powers, unowned, provinces, adjacency_list, spring, year, phas
                 home_center=short in home_center,
                 coastal=properties[short][0] == 'COAST',
                 without_coast=name_to_index[short.split('/')[0]] if '/' in short else index,
-                neighbours=tuple(adjacency.difference(shut)),
+                neighbours=adjacency.difference(shut),
                 # neighbours that are seas
                 seas=seas,
             )
         )
+
+    # make it reference itself
+    # it this going to make the GC scream
+    for pro in data:
+        pro.neighbours = tuple(data[i] for i in pro.neighbours)
+        pro.seas = set(data[name_to_index[i]] for i in pro.seas)
+        pro.without_coast = data[pro.without_coast]
 
     # make immutable `array`
     return name_to_index, tuple(data)
