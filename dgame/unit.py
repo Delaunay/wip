@@ -37,7 +37,7 @@ class Unit:
         self.unit_type = None
         self._reachable_tiles_cache = None
 
-    def get_possible_move_order(self, orders_per_location=None, move_orders=None) -> Set[Order]:
+    def get_possible_move_order(self, move_orders=None) -> Set[Order]:
         """ All possible order during the move phase """
         tiles = self.reachable_tiles()
 
@@ -62,11 +62,6 @@ class Unit:
         # support move order
 
         for tile in tiles:
-            #other_orders = None
-
-            #if orders_per_location is not None:
-            #    other_orders = orders_per_location.get(tile)
-
             sup_unit = self.board.get_unit_at(tile)
 
             # no unit so we can move right away
@@ -77,14 +72,6 @@ class Unit:
                 orders.add(support(self, target=sup_unit))
                 move_unit(self, tile)
 
-                # if both units can move into a tile then do a support_move
-                # common_tiles = set(tiles).intersection(sup_unit.reachable_tiles())
-                # common_tiles.discard(self.loc)
-                # common_tiles.discard(sup_unit.loc)
-
-                # for dest in common_tiles:
-                #    orders.add(support_move(self, sup_unit, dest))
-
                 # There is a fleet unit which means we can convoy to a destination
                 if not self.is_fleet and sup_unit.is_fleet and self.loc.seas:
 
@@ -92,15 +79,6 @@ class Unit:
                     if sup_unit.loc is not tile:
                         orders.add(convoy(sup_unit, target=self, dest=tile))
                         orders.add(convoy_move(self, dest=tile))
-
-
-
-                # if a unit can move to the destination
-                # if other_orders is not None:
-                #     for order in other_orders:
-                #        # we can support the attack move iff we can also move to it
-                #        if order.order == MOVE and order.unit is not self and order.dest in self.loc.neighbours:
-                #            orders.add(support_move(unit=self, target=order.unit, dest=order.dest))
 
         return orders
 
@@ -209,7 +187,7 @@ def get_all_possible_move_orders(board):
     move_orders = {}
 
     for unit in board.units():
-        other_orders[unit.loc] = unit.get_possible_move_order(other_orders, move_orders)
+        other_orders[unit.loc] = unit.get_possible_move_order(move_orders)
 
     # no coast destination so we can unify fleet on coast and army supporting that fleet
     for dest_nc, orders in move_orders.items():
