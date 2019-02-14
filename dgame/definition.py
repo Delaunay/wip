@@ -57,7 +57,9 @@ def make_database(powers, unowned, provinces, adjacency_list, spring, year, phas
 
     for index, province in enumerate(provinces):
         short = province[1][0].upper()
+
         adjacency = set([name_to_index[i.upper()] for i in properties[short][2]])
+        seas = set(filter(lambda x: properties[x.upper()][0] == 'WATER', properties[short][2]))
 
         data.append(
             Province(
@@ -69,7 +71,9 @@ def make_database(powers, unowned, provinces, adjacency_list, spring, year, phas
                 home_center=short in home_center,
                 coastal=properties[short][0] == 'COAST',
                 without_coast=name_to_index[short.split('/')[0]] if '/' in short else index,
-                neighbours=tuple(adjacency.difference(shut))
+                neighbours=tuple(adjacency.difference(shut)),
+                # neighbours that are seas
+                seas=seas,
             )
         )
 

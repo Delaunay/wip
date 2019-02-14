@@ -50,10 +50,12 @@ class Unit:
             order = move(unit, dest=dest)
             orders.add(order)
 
-            if tile not in move_orders:
-                move_orders[tile] = set()
+            loc_nc = self.board.get_tile_by_id(tile.without_coast)
 
-            move_orders[tile].add(order)
+            if tile not in move_orders:
+                move_orders[loc_nc] = set()
+
+            move_orders[loc_nc].add(order)
 
         # first we establish where can a unit move
         # then given that information we can check where multiple units can move to the same location and add the
@@ -73,6 +75,7 @@ class Unit:
 
             if sup_unit is not None:
                 orders.add(support(self, target=sup_unit))
+                move_unit(self, tile)
 
                 # if both units can move into a tile then do a support_move
                 # common_tiles = set(tiles).intersection(sup_unit.reachable_tiles())
@@ -83,14 +86,14 @@ class Unit:
                 #    orders.add(support_move(self, sup_unit, dest))
 
                 # There is a fleet unit which means we can convoy to a destination
-                if not self.is_fleet and sup_unit.is_fleet:
+                if not self.is_fleet and sup_unit.is_fleet and self.loc.seas:
 
                     # do not convoy to an adjacent tile (why take the boat if you can walk to it?)
                     if sup_unit.loc is not tile:
                         orders.add(convoy(sup_unit, target=self, dest=tile))
                         orders.add(convoy_move(self, dest=tile))
-                    else:
-                        move_unit(self, tile)
+
+
 
                 # if a unit can move to the destination
                 # if other_orders is not None:
@@ -163,6 +166,7 @@ class Fleet(Unit):
 
     def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
         """ fleets can reach every tile that are adjacent """
+        # print(convoy_)
 
         if not convoy_:
             # return set(filter(lambda x: self.board.get_tile_by_id(x).is_water, self.loc.neighbours))
@@ -171,7 +175,11 @@ class Fleet(Unit):
             for tile_id in self.loc.neighbours:
                 tile = self.board.get_tile_by_id(tile_id)
 
-                if tile.is_water and tile not in path:
+                # for a tile to be reachable by a fleet it needs to be either water
+                # or a land tile with a common sea between current loc and dest loc
+                has_common_sea = len(self.loc.seas.intersection(tile.seas)) > 0
+
+                if (tile.is_water or has_common_sea) and tile not in path:
                     reachable.add(tile)
 
             reachable.discard(self.loc)
@@ -203,7 +211,9 @@ def get_all_possible_move_orders(board):
     for unit in board.units():
         other_orders[unit.loc] = unit.get_possible_move_order(other_orders, move_orders)
 
-    for dest, orders in move_orders.items():
+    # no coast destination so we can unify fleet on coast and army supporting that fleet
+    for dest_nc, orders in move_orders.items():
+        # print(dest_nc, unit.loc)
 
         for o1 in orders:
             unit = o1.unit
@@ -214,26 +224,14 @@ def get_all_possible_move_orders(board):
                     continue
 
                 target = o2.unit
-                corder.add(support_move(unit, target=target, dest=dest))
+                corder.add(support_move(unit, target=target, dest=o2.dest))
 
     return other_orders
 
 
-if __name__ == '__main__':
-    from dgame.board import Board
-    from dgame.definition import BoardDefinitionFile
-    import sys
-    sys.stderr = sys.stdout
-
-    diplo_board = BoardDefinitionFile('/home/user1/diplomacy/diplomacy/maps/standard.map')
-    players = [
-        Player(p) for p in diplo_board.initial_condition()
-    ]
-
-    austria = players[0]
-
-    board = Board(diplo_board, players)
-
+def test():
+    #game.clear_units()
+    #game.set_units('TURKEY', ['A NOR', 'F NTH'])
     print('=' * 75)
     for i in range(1, 76):
 
@@ -256,7 +254,6 @@ if __name__ == '__main__':
 
     # -------------------------------------------------------------------------------
 
-
     print('=' * 80)
 
     a1 = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('NWY'))))
@@ -268,12 +265,6 @@ if __name__ == '__main__':
 
     print('-' * 10)
     print(a1.get_possible_move_order())
-
-    from diplomacy.engine.game import Game
-
-    game = Game()
-    #game.clear_units()
-    #game.set_units('TURKEY', ['A NOR', 'F NTH'])
 
     orders = []
 
@@ -290,52 +281,36 @@ if __name__ == '__main__':
     assert len(board._loc_unit) == 0
     assert len(board.units()) == 0
 
+
+if __name__ == '__main__':
+    from dgame.board import Board
+    from dgame.definition import BoardDefinitionFile
+    import sys
+    sys.stderr = sys.stdout
+
+    diplo_board = BoardDefinitionFile('/home/user1/diplomacy/diplomacy/maps/standard.map')
+    players = [
+        Player(p) for p in diplo_board.initial_condition()
+    ]
+
+    austria = players[0]
+
+    board = Board(diplo_board, players)
+
+
+    from diplomacy.engine.game import Game
+
+    game = Game()
+
     orders = {}
 
     for p in players:
         power = p.power
 
         for (tp, loc) in power[3]:
-            orders[loc] = board.process_order (p, build(make_unit(tp, board.get_tile_by_name(loc))))
+            orders[loc] = board.process_order(p, build(make_unit(tp, board.get_tile_by_name(loc))))
 
-    # board.add_unit(UnitType.Fleet, board.get_tile_by_name('NOR'), players[0])
-
-    # bud = board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('BUD'))))
-    # board.process_order(austria, build(make_unit(ARMY, board.get_tile_by_name('VIE'))))
-    # board.process_order(austria, build(make_unit(FLEET, board.get_tile_by_name('TRI'))))
-    #
-    # board.process_order(england, build(make_unit(ARMY, board.get_tile_by_name('LVP'))))
-    # board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('LON'))))
-    # board.process_order(england, build(make_unit(FLEET, board.get_tile_by_name('EDI'))))
-    #
-    # board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('MAR'))))
-    # board.process_order(france, build(make_unit(ARMY, board.get_tile_by_name('PAR'))))
-    # board.process_order(france, build(make_unit(FLEET, board.get_tile_by_name('BRE'))))
-    #
-    # board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('MUN'))))
-    # board.process_order(germany, build(make_unit(ARMY, board.get_tile_by_name('BER'))))
-    # board.process_order(germany, build(make_unit(FLEET, board.get_tile_by_name('KIE'))))
-    #
-    # board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('ROM'))))
-    # board.process_order(italy, build(make_unit(ARMY, board.get_tile_by_name('VEN'))))
-    # board.process_order(italy, build(make_unit(FLEET, board.get_tile_by_name('NAP'))))
-    #
-    # board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('WAR'))))
-    # board.process_order(russia, build(make_unit(ARMY, board.get_tile_by_name('MOS'))))
-    # board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('SEV'))))
-    # board.process_order(russia, build(make_unit(FLEET, board.get_tile_by_name('STP'))))
-    #
-    # con = board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('CON'))))
-    # board.process_order(turkey, build(make_unit(ARMY, board.get_tile_by_name('SMY'))))
-    # board.process_order(turkey, build(make_unit(FLEET, board.get_tile_by_name('ANK'))))
-
-    #other_orders = {}
-    #for unit in board.units():
-    #    other_orders[unit.loc] = unit.get_possible_move_order(other_orders)
-
-    #new = list(map(lambda x: repr(x), con.get_possible_move_order(other_orders)))
-
-    loc = 'MAR'
+    loc = 'MOS'
 
     new = get_all_possible_move_orders(board)[board.get_tile_by_name(loc)]
     new = list(map(lambda x: str(x), new))
@@ -343,6 +318,13 @@ if __name__ == '__main__':
 
     old = list(set(game.get_all_possible_orders()[loc]))
     old.sort()
+
+    unit = board.get_unit_at(board.get_tile_by_name(loc))
+
+    print('-' * 80)
+    print(unit)
+    for tile in unit.reachable_tiles():
+        print(tile, tile.seas)
 
     print('-' * 80)
     print(board.get_tile_by_name(loc).neighbours)
@@ -368,6 +350,8 @@ if __name__ == '__main__':
     newallrall = []
 
     diff_n = 0
+    old_tn = 0
+    new_tn = 0
 
     for (k, j) in newallr.items():
 
@@ -378,14 +362,27 @@ if __name__ == '__main__':
 
         old_set = set(i)
         new_set = set(list(map(lambda x: repr(x), j)))
-        diff = old_set.difference(new_set)
+
+        diff = old_set.symmetric_difference(new_set)
+        old_n = len(old_set)
+        new_n = len(new_set)
+        old_tn += len(old_set)
+        new_tn += len(new_set)
+
+        if old_n != new_n or diff:
+            print(k, old_n, new_n)
+            print('OLD  ', old_set)
+            print('NEW  ', new_set)
+            print('DIFF ', diff)
+            print('---')
 
         if diff:
-            print(k, diff)
+            #print(k, diff)
             diff_n += len(diff)
 
     print('-' * 80)
-    print('OLD: ', len(oldallrall))
-    print('NEW: ', len(newallrall))
+    print('OLD: ', len(oldallrall), old_tn)
+    print('NEW: ', len(newallrall), new_tn)
     print('Diff ', diff_n)
+    print('Diff', old_tn - new_tn)
 

@@ -1,11 +1,11 @@
-from typing import List
+from typing import List, Optional
 from enum import Enum
 
 
 class Province:
 
     def __init__(self, pid: int, name: str, short: str, supply_center: bool, water: bool, home_center: bool, coastal: List[int],
-                 without_coast: int, neighbours: List[int]):
+                 without_coast: int, neighbours: List[int], seas: Optional[List[int]] = None):
         self.id = pid
         self.short = short
         self.name = name
@@ -15,6 +15,7 @@ class Province:
         self.is_home_center = home_center       # is a home supply center tile
         self.without_coast = without_coast      # index pointing to the tile without the coast component
         self.coasts = coastal                   # number of neighbouring Sea Tiles
+        self.seas = seas
 
     def __repr__(self):
         return '{}(id={}, supply={}, water={}, home={}, coasts={}, {})'.format(
