@@ -45,12 +45,8 @@ class Unit:
             move_orders = {}
 
         def move_unit(unit: Unit, dest: Province):
-            if unit.loc is dest:
-                return
-
             order = move(unit, dest=dest)
             orders.add(order)
-
             loc_nc = tile.without_coast
 
             if tile not in move_orders:
@@ -62,16 +58,23 @@ class Unit:
         # then given that information we can check where multiple units can move to the same location and add the
         # support move order
 
-        for tile in tiles:
+        for tile, path in tiles:
             sup_unit = self.board.get_unit_at(tile)
-            move_unit(self, tile)
+
+            if len(path) == 1:
+                move_unit(self, tile)
+            elif tile is not self.loc:
+                order = convoy_move(self, tile)
+                orders.add(order)
 
             if sup_unit is not None:
-                orders.add(support(self, target=sup_unit))
+                # we cannot support a unit that convoys us
+                if len(path) == 1:
+                    orders.add(support(self, target=sup_unit))
 
                 # There is a fleet unit which means we can convoy to a destination
                 if not self.is_fleet and sup_unit.is_fleet and self.loc.seas:
-                    print('HELLO')
+
                     # do not convoy to an adjacent tile (why take the boat if you can walk to it?)
                     if sup_unit.loc is not tile:
                         orders.add(convoy(sup_unit, target=self, dest=tile))
@@ -80,24 +83,20 @@ class Unit:
         return orders
 
     def reachable_tiles(self):
-        val = self.board._cache.get(self)
+        if self._reachable_tiles_cache is None:
+            self._reachable_tiles_cache = self._reachable_tiles(False, [self.loc])
 
-        if val is not None:
-            return val
+            # remove coasts BUL/EC, BUL/SC => BUL
+            if not self.is_fleet:
+                self._reachable_tiles_cache = set(map(lambda x: (x[0].without_coast, x[1]), self._reachable_tiles_cache))
 
-        val = self._reachable_tiles(False, [])
-
-        # remove coasts BUL/EC, BUL/SC => BUL
-        if not self.is_fleet:
-            val = set(map(lambda x: x.without_coast, val))
-
-        self.board._cache[self] = val
-        return val
+        return self._reachable_tiles_cache
 
     def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
         """ Compute all the reachable tiles for a given unit.
             This take into account all the adjacent land tiles and all the land tiles accessible through convoys """
         reachable = set()
+        ipath = tuple(path)
 
         # For each tile check if they are accessible
         for tile in self.loc.neighbours:
@@ -105,15 +104,17 @@ class Unit:
             if tile.is_water:
                 unit = self.board.get_unit_at(tile)
 
-                if unit is not None and unit.is_fleet and self.loc not in path:
+                if unit is not None and unit.is_fleet and tile not in path:
                     # There is a fleet on the tile so we might be able to convoy though fleet chains
                     path.append(self.loc)
                     reachable = reachable.union(unit._reachable_tiles(convoy_=True, path=path))
+
+
             else:
-                reachable.add(tile)
+                if tile not in path:
+                    reachable.add((tile, ipath))
 
         # remove current location
-        reachable.discard(self.loc)
         return reachable
 
     @property
@@ -156,7 +157,7 @@ class Fleet(Unit):
                 has_common_sea = len(self.loc.seas.intersection(tile.seas)) > 0
 
                 if (tile.is_water or has_common_sea) and tile not in path:
-                    reachable.add(tile)
+                    reachable.add((tile, tuple(path)))
 
             reachable.discard(self.loc)
             return reachable

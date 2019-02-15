@@ -49,7 +49,7 @@ def compare_results(oldallr, newallr, board):
             unit = board.get_unit_at(board.get_tile_by_name(str(k)))
             print('-' * 80)
             print(unit, list(map(lambda x: x.short, unit.loc.neighbours)))
-            for tile in unit.reachable_tiles():
+            for tile, path in unit.reachable_tiles():
                 print('     - ', tile, list(map(lambda x: x.short, tile.seas)))
             print('-' * 80)
 
