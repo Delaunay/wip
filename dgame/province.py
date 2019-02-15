@@ -1,11 +1,10 @@
 from typing import List, Optional
-from enum import Enum
 
 
 class Province:
 
     def __init__(self, pid: int, name: str, short: str, supply_center: bool, water: bool, home_center: bool, coastal: List[int],
-                 without_coast: int, neighbours: List[int], seas: Optional[List[int]] = None):
+                 without_coast: 'Province', neighbours: List['Province'], seas: Optional[List['Province']] = None):
         self.id = pid
         self.short = short
         self.name = name
@@ -18,15 +17,19 @@ class Province:
         self.seas = seas
 
     def __repr__(self):
-        return '{}(id={}, supply={}, water={}, home={}, coasts={}, -)'.format(
+        return '{}(id={}, supply={}, water={}, home={}, coasts={}, adj={})'.format(
             self.short,
             self.id,
             self.is_supply_center,
             self.is_water,
             self.is_home_center,
-            self.coasts)
+            self.coasts,
+            [i.short for i in self.neighbours]
+        )
 
     def __str__(self):
         return self.short
 
+    def __lt__(self, other):
+        return self.short < other.short
 

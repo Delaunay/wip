@@ -61,6 +61,9 @@ class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target'])):
     """
 
     def __repr__(self):
+        return '<{} unit=`{}` target=`{}` dest=`{}`>'.format(self.order.name, self.unit, self.target, self.dest)
+
+    def __str__(self):
         if self.order is HOLD:
             return '{} H'.format(self.unit)
         if self.order is SUPPORT:

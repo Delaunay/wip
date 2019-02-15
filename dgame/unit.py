@@ -2,8 +2,6 @@ from dgame.province import Province
 from dgame.power import Player
 from dgame.order import Order
 from dgame.order import move, hold, support, support_move, convoy, convoy_move, build, disband
-from dgame.order import MOVE
-from dgame.diplomacy_europe_1901 import Diplomacy1901
 
 from enum import IntEnum, unique
 from typing import Set, List
@@ -47,6 +45,9 @@ class Unit:
             move_orders = {}
 
         def move_unit(unit: Unit, dest: Province):
+            if unit.loc is dest:
+                return
+
             order = move(unit, dest=dest)
             orders.add(order)
 
@@ -63,18 +64,14 @@ class Unit:
 
         for tile in tiles:
             sup_unit = self.board.get_unit_at(tile)
-
-            # no unit so we can move right away
-            if sup_unit is None or not sup_unit.is_fleet:
-                move_unit(self, tile)
+            move_unit(self, tile)
 
             if sup_unit is not None:
                 orders.add(support(self, target=sup_unit))
-                move_unit(self, tile)
 
                 # There is a fleet unit which means we can convoy to a destination
                 if not self.is_fleet and sup_unit.is_fleet and self.loc.seas:
-
+                    print('HELLO')
                     # do not convoy to an adjacent tile (why take the boat if you can walk to it?)
                     if sup_unit.loc is not tile:
                         orders.add(convoy(sup_unit, target=self, dest=tile))
@@ -83,14 +80,19 @@ class Unit:
         return orders
 
     def reachable_tiles(self):
-        if self._reachable_tiles_cache is None:
-            self._reachable_tiles_cache = self._reachable_tiles(False, [])
+        val = self.board._cache.get(self)
 
-            # remove coasts BUL/EC, BUL/SC => BUL
-            if not self.is_fleet:
-                self._reachable_tiles_cache = set(map(lambda x: x.without_coast, self._reachable_tiles_cache))
+        if val is not None:
+            return val
 
-        return self._reachable_tiles_cache
+        val = self._reachable_tiles(False, [])
+
+        # remove coasts BUL/EC, BUL/SC => BUL
+        if not self.is_fleet:
+            val = set(map(lambda x: x.without_coast, val))
+
+        self.board._cache[self] = val
+        return val
 
     def _reachable_tiles(self, convoy_: bool, path: List[Province]) -> Set[Province]:
         """ Compute all the reachable tiles for a given unit.
@@ -103,7 +105,7 @@ class Unit:
             if tile.is_water:
                 unit = self.board.get_unit_at(tile)
 
-                if unit is not None and unit.is_fleet:
+                if unit is not None and unit.is_fleet and self.loc not in path:
                     # There is a fleet on the tile so we might be able to convoy though fleet chains
                     path.append(self.loc)
                     reachable = reachable.union(unit._reachable_tiles(convoy_=True, path=path))
@@ -300,7 +302,6 @@ if __name__ == '__main__':
     board = Board(diplo_board, players)
 
 
-
     from diplomacy.engine.game import Game
 
     game = Game()
@@ -364,7 +365,7 @@ if __name__ == '__main__':
         newallrall.extend(j)
 
         old_set = set(i)
-        new_set = set(list(map(lambda x: repr(x), j)))
+        new_set = set(list(map(lambda x: str(x), j)))
 
         diff = old_set.symmetric_difference(new_set)
         old_n = len(old_set)
@@ -387,7 +388,7 @@ if __name__ == '__main__':
     print('OLD: ', len(oldallrall), old_tn)
     print('NEW: ', len(newallrall), new_tn)
     print('Diff ', diff_n)
-    print('Diff', old_tn - new_tn)
+    print('Diff ', old_tn - new_tn)
 
 
 

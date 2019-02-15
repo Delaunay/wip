@@ -1,5 +1,4 @@
 from typing import Tuple
-import re
 
 from dgame.province import Province
 
@@ -77,8 +76,8 @@ def make_database(powers, unowned, provinces, adjacency_list, spring, year, phas
             )
         )
 
-    # make it reference itself
-    # it this going to make the GC scream
+    # make it reference itself this should be OK
+    # because python GC detects cyclic references
     for pro in data:
         pro.neighbours = tuple(data[i] for i in pro.neighbours)
         pro.seas = set(data[name_to_index[i]] for i in pro.seas)
@@ -116,6 +115,12 @@ class BoardDefinitionFile(AbstractBoardDefinition):
 
     def initial_condition(self):
         return self.powers
+
+
+class BoardDefinitionLegacy(AbstractBoardDefinition):
+
+    def __init__(self, game):
+        pass
 
 
 if __name__ == '__main__':

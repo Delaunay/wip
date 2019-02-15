@@ -20,9 +20,16 @@ class Board:
 
     def __init__(self, board_definition: AbstractBoardDefinition, players: List[Player]):
         self._definition = board_definition
-        self._players = players
+        self._players = {
+            p.power[0]: p for p in players
+        }
         self._units = set()
         self._loc_unit = {}
+        self._time = 0
+
+        # Board wide cache we do not want to put caches in a lot of different places
+        # so we should put them in only one spot for invalidation
+        self._cache = {}
 
         self.instruction_dispatch = {
             HOLD: self.hold,
@@ -40,6 +47,9 @@ class Board:
     @staticmethod
     def __check_ownerships(player: Player, unit: Unit, message: str):
         assert unit.owner is player, '{}; the unit {} is owned by {} not {}'.format(message, unit, unit.owner, player)
+
+    def invalidate_cache(self):
+        self._cache = {}
 
     def process_order(self, player: Player, order: Order):
         return self.instruction_dispatch[order.order](player, order)
@@ -64,12 +74,14 @@ class Board:
         self._units.discard(unit)
 
     def move_unit(self, player: Player, order: Order):
-        unit = self._loc_unit.pop(order.unit.loc)
+        assert self._loc_unit.get(order.dest.without_coast) is None, 'Cannot move unit {} {}'
+
+        unit = self._loc_unit.pop(order.unit.loc.without_coast)
 
         self.__check_ownerships(player, unit, 'Cannot move')
 
         self._loc_unit[order.dest.without_coast] = unit
-        unit.loc = order.unit.dest
+        unit.loc = order.dest
 
     def hold(self, player: Player, order: Order):
         pass
@@ -107,3 +119,6 @@ class Board:
 
     def players(self):
         return self._players
+
+    def get_player(self, name: str):
+        return self._players[name]
