@@ -50,7 +50,7 @@ DISBAND = OrderTypes.Disband
 WAIVE = OrderTypes.Waive
 
 
-class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target'])):
+class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target', 'path'])):
     """
         order: order type
         unit: unit type doing the order
@@ -89,40 +89,40 @@ class Order(namedtuple('Order', ['order', 'unit', 'dest', 'target'])):
 
 
 def hold(unit: Unit) -> Order:
-    return Order(order=HOLD, unit=unit, dest=None, target=None)
+    return Order(order=HOLD, unit=unit, dest=None, target=None, path=None)
 
 
 def move(unit: Unit, dest: Province) -> Order:
-    return Order(order=MOVE, unit=unit, dest=dest, target=None)
+    return Order(order=MOVE, unit=unit, dest=dest, target=None, path=None)
 
 
-def convoy_move(unit: Unit, dest: Province) -> Order:
-    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=None)
+def convoy_move(unit: Unit, dest: Province, path=None) -> Order:
+    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=None, path=path)
 
 
 def convoy(unit: Unit, target: Unit, dest: Province) -> Order:
-    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=target)
+    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=target, path=None)
 
 
 def support(unit: Unit, target: Unit) -> Order:
-    return Order(order=SUPPORT, unit=unit, dest=None, target=target)
+    return Order(order=SUPPORT, unit=unit, dest=None, target=target, path=None)
 
 
 def support_move(unit: Unit, target: Unit, dest: Province) -> Order:
-    return Order(order=SUPPORT_MOVE, unit=unit, dest=dest, target=target)
+    return Order(order=SUPPORT_MOVE, unit=unit, dest=dest, target=target, path=None)
 
 
 def retreat(unit: Unit, dest: Province) -> Order:
-    return Order(order=RETREAT, unit=unit, dest=dest, target=None)
+    return Order(order=RETREAT, unit=unit, dest=dest, target=None, path=None)
 
 
 def disband(unit: Unit) -> Order:
-    return Order(order=DISBAND, unit=unit, dest=None, target=None)
+    return Order(order=DISBAND, unit=unit, dest=None, target=None, path=None)
 
 
 def build(unit: Unit) -> Order:
-    return Order(order=BUILD, unit=unit, dest=None, target=None)
+    return Order(order=BUILD, unit=unit, dest=None, target=None, path=None)
 
 
 def waive() -> Order:
-    return Order(order=WAIVE, unit=None, dest=None, target=None)
+    return Order(order=WAIVE, unit=None, dest=None, target=None, path=None)

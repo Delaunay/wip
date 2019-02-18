@@ -2,9 +2,22 @@ from dgame.province import Province
 from dgame.power import Player
 from dgame.order import Order
 from dgame.order import move, hold, support, support_move, convoy, convoy_move, build, disband
+from dgame.order import CONVOY_MOVE
 
 from enum import IntEnum, unique
 from typing import Set, List
+
+from collections import Iterable
+
+
+def flatten(a: Iterable) -> List[any]:
+    if isinstance(a, Iterable):
+        r = []
+        for i in a:
+            elem = flatten(i)
+            r.extend(elem)
+        return r
+    return [a]
 
 
 @unique
@@ -44,12 +57,10 @@ class Unit:
         if move_orders is None:
             move_orders = {}
 
-        def move_unit(unit: Unit, dest: Province):
-            order = move(unit, dest=dest)
-            orders.add(order)
+        def append_move_order(tile, order):
             loc_nc = tile.without_coast
 
-            if tile not in move_orders:
+            if loc_nc not in move_orders:
                 move_orders[loc_nc] = set()
 
             move_orders[loc_nc].add(order)
@@ -62,10 +73,14 @@ class Unit:
             sup_unit = self.board.get_unit_at(tile)
 
             if len(path) == 1:
-                move_unit(self, tile)
-            elif tile is not self.loc:
-                order = convoy_move(self, tile)
+                order = move(self, dest=tile)
                 orders.add(order)
+                append_move_order(tile, order)
+
+            elif tile is not self.loc:
+                order = convoy_move(self, tile, path=tuple(flatten(path)))
+                orders.add(order)
+                append_move_order(tile, order)
 
             if sup_unit is not None:
                 # we cannot support a unit that convoys us
@@ -78,7 +93,7 @@ class Unit:
                     # do not convoy to an adjacent tile (why take the boat if you can walk to it?)
                     if sup_unit.loc is not tile:
                         orders.add(convoy(sup_unit, target=self, dest=tile))
-                        orders.add(convoy_move(self, dest=tile))
+                        orders.add(convoy_move(self, dest=tile, path=tuple(flatten(path))))
 
         return orders
 
@@ -108,7 +123,6 @@ class Unit:
                     # There is a fleet on the tile so we might be able to convoy though fleet chains
                     path.append(self.loc)
                     reachable = reachable.union(unit._reachable_tiles(convoy_=True, path=path))
-
 
             else:
                 if tile not in path:
@@ -151,10 +165,9 @@ class Fleet(Unit):
             reachable = set()
 
             for tile in self.loc.neighbours:
-
                 # for a tile to be reachable by a fleet it needs to be either water
                 # or a land tile with a common sea between current loc and dest loc
-                has_common_sea = len(self.loc.seas.intersection(tile.seas)) > 0
+                has_common_sea = self.loc in tile.seas or len(self.loc.seas.intersection(tile.seas)) > 0
 
                 if (tile.is_water or has_common_sea) and tile not in path:
                     reachable.add((tile, tuple(path)))
@@ -181,27 +194,46 @@ def make_unit(type: UnitType, loc: Province, owner: Player = None, board: 'Board
     return Army(loc, owner, board)
 
 
-def get_all_possible_move_orders(board):
+def get_all_possible_move_orders(board, move_orders=None):
     other_orders = {}
-    move_orders = {}
+    if move_orders is None:
+        move_orders = {}
 
     for unit in board.units():
-        other_orders[unit.loc] = unit.get_possible_move_order(move_orders)
+        other_orders[unit.loc.without_coast] = unit.get_possible_move_order(move_orders)
 
     # no coast destination so we can unify fleet on coast and army supporting that fleet
     for dest_nc, orders in move_orders.items():
-        # print(dest_nc, unit.loc)
 
         for o1 in orders:
             unit = o1.unit
-            corder = other_orders[unit.loc]
+            corder = other_orders[unit.loc.without_coast]
 
             for o2 in orders:
                 if o1 is o2:
                     continue
+                if o1.unit is o2.unit:
+                    continue
+                elif o1.order == CONVOY_MOVE:
+                    # in a `convoy move` the move (o2.unit) can be supported
+                    # but the one doing the move cannot support
+                    # i.e o1 has to be
 
-                target = o2.unit
-                corder.add(support_move(unit, target=target, dest=o2.dest))
+                    # F HOL S A YOR - BEL  (A YOR - BEL VIA NTH)
+                    # but A YOR S F HOL - BEL is not possible
+                    if o1.path is None and o2.path is not None:
+                        target = o2.unit
+                        corder.add(support_move(unit, target=target, dest=o2.dest))
+                        print('HERE')
+                        #print(o1, list(map(lambda x: str(x), o1.path)))
+                else:
+                    target = o2.unit
+                    corder.add(support_move(unit, target=target, dest=o2.dest))
+
+                    # http://web.inter.nl.net/users/L.B.Kruijswijk/#6.B
+                    # 6.B.8 UPPORTING WITH UNSPECIFIED COAST WHEN ONLY ONE COAST IS POSSIBLE
+                    if o2.dest is not dest_nc:
+                        corder.add(support_move(unit, target=target, dest=dest_nc))
 
     return other_orders
 

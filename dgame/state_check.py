@@ -4,6 +4,7 @@ from dgame.definition import BoardDefinitionFile
 from dgame.power import Player
 from dgame.unit import get_all_possible_move_orders, make_unit
 from dgame.order import build
+from dgame.province import Province
 from dgame.order import hold, move, support_move, support, convoy_move, convoy, retreat, disband, build, waive
 
 from diplomacy.engine.game import Game
@@ -92,6 +93,60 @@ class GameExecutor:
         self.new_game = None
         self.old_game = Game()
 
+    def to_string(self, dest):
+        if dest is None:
+            return dest
+        a = list(map(lambda x: str(x), dest))
+        a.sort()
+        return a
+
+    def show_reachable(self, loc):
+        print('>' * 10, 'REACHABLE (loc=', loc, ')')
+        loc: Province = self.new_game.get_tile_by_name(loc)
+        unit = self.new_game.get_unit_at(loc)
+
+        if unit is None:
+            return
+
+        print(unit)
+        for tile, path in unit.reachable_tiles():
+            print('   ->', str(tile))
+
+        print('Adjacent Tiles')
+        for n in loc.neighbours:
+            print('   ->', n)
+
+        print('<' * 10)
+
+    def show_loc_diff(self, loc, old, new):
+        print('>' * 10, 'DIFF (loc=', loc, ')')
+        oldr = old.get(loc)
+        newr = self.to_string(new.get(self.new_game.get_tile_by_name(loc)))
+
+        if newr is not None:
+            newr.sort()
+
+        if oldr is not None:
+            oldr.sort()
+
+        print('OLD {}:'.format(loc), oldr)
+        print()
+        print('NEW {}:'.format(loc), newr)
+        print('--')
+
+        if newr is not None:
+            print('   DIFF: ', set(oldr).symmetric_difference(newr))
+
+        print('<' * 10)
+
+    def show_move_orders(self, orders, loc):
+        print('>' * 10, 'MOVE ORDER IN (loc=', loc, ')')
+        ord = orders[self.new_game.get_tile_by_name(loc)]
+
+        for o in ord:
+            print(o)
+        print('<' * 10)
+
     def replay(self, count=1):
 
         for k, round in enumerate(self.phases):
@@ -101,11 +156,18 @@ class GameExecutor:
             # Set new game in function of cache
 
             self.new_game = self.make_new_game(state)
-            new_results = get_all_possible_move_orders(self.new_game)
+            move_orders = {}
+            new_results = get_all_possible_move_orders(self.new_game, move_orders)
             old_results = self.old_game.get_all_possible_orders()
 
             for unit in self.new_game.units():
                 print('{:>30} {}'.format(unit.owner.power[0], unit))
+
+            self.show_move_orders(move_orders, 'NTH')
+
+            self.show_reachable('NTH')
+
+            self.show_loc_diff('NTH', old_results, new_results)
 
             compare_results(old_results, new_results, self.new_game)
 
