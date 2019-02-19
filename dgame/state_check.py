@@ -54,7 +54,7 @@ def compare_results(oldallr, newallr, board):
                 print('     - ', tile, list(map(lambda x: x.short, tile.seas)))
             print('-' * 80)
 
-            raise AssertionError()
+            # raise AssertionError()
 
         if diff:
             #print(k, diff)
@@ -110,7 +110,7 @@ class GameExecutor:
 
         print(unit)
         for tile, path in unit.reachable_tiles():
-            print('   ->', str(tile))
+            print('   ->', str(tile), 'path=', tuple(map(lambda x: str(x), path)))
 
         print('Adjacent Tiles')
         for n in loc.neighbours:
@@ -141,7 +141,10 @@ class GameExecutor:
 
     def show_move_orders(self, orders, loc):
         print('>' * 10, 'MOVE ORDER IN (loc=', loc, ')')
-        ord = orders[self.new_game.get_tile_by_name(loc)]
+        ord = orders.get(self.new_game.get_tile_by_name(loc))
+
+        if ord is None:
+            return
 
         for o in ord:
             print(o)
@@ -150,26 +153,48 @@ class GameExecutor:
     def replay(self, count=1):
 
         for k, round in enumerate(self.phases):
+            print('=' * 80)
             s, y, p = split_name(round['name'])
 
-            state = round['state']
-            # Set new game in function of cache
+            if p == 'M':
+                state = round['state']
+                # Set new game in function of cache
 
-            self.new_game = self.make_new_game(state)
-            move_orders = {}
-            new_results = get_all_possible_move_orders(self.new_game, move_orders)
-            old_results = self.old_game.get_all_possible_orders()
+                self.new_game = self.make_new_game(state)
+                move_orders = {}
+                new_results = get_all_possible_move_orders(self.new_game, move_orders)
+                old_results = self.old_game.get_all_possible_orders()
 
-            for unit in self.new_game.units():
-                print('{:>30} {}'.format(unit.owner.power[0], unit))
+                old_units = []
+                new_units = []
 
-            self.show_move_orders(move_orders, 'NTH')
+                for unit in self.new_game.units():
+                    new_units.append('{:>30} {}'.format(unit.owner.power[0], unit))
 
-            self.show_reachable('NTH')
+                for name, p in self.old_game.powers.items():
+                    for u in p.units:
+                        old_units.append('{:>30} {}'.format(name, u))
 
-            self.show_loc_diff('NTH', old_results, new_results)
+                old_units.sort()
+                new_units.sort()
 
-            compare_results(old_results, new_results, self.new_game)
+                print('{:>30}      {:>30} k={}'.format('OLD', 'NEW', k), len(old_units), len(new_units))
+                print('-' * 80)
+                for o, n in zip(old_units, new_units):
+                    print(o, n)
+                print('-' * 80)
+
+                self.show_move_orders(move_orders, 'CLY')
+
+                self.show_reachable('YOR')
+
+                self.show_loc_diff('NWG', old_results, new_results)
+
+                compare_results(old_results, new_results, self.new_game)
+
+
+            else:
+                print('Skipping: {}'.format(p))
 
             orders = round['orders']
             results = round['results']
@@ -180,9 +205,17 @@ class GameExecutor:
 
             # All have been processed
             self.old_game.process()
+            phase = self.old_game._phase_abbr()
 
             if k >= count:
                 break
+
+            print(orders)
+            print(results)
+
+            # F NWG C A YOR - EDI
+            # F NTH C A YOR - EDI
+            # A YOR - EDI VIA
 
 
 if __name__ == '__main__':
@@ -191,4 +224,4 @@ if __name__ == '__main__':
 
     game = GameExecutor('/home/user1/diplomacy/diplomacy/tests/network/1.json')
 
-    print(game.replay(1))
+    print(game.replay(3))

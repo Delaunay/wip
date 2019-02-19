@@ -101,7 +101,7 @@ def convoy_move(unit: Unit, dest: Province, path=None) -> Order:
 
 
 def convoy(unit: Unit, target: Unit, dest: Province) -> Order:
-    return Order(order=CONVOY_MOVE, unit=unit, dest=dest, target=target, path=None)
+    return Order(order=CONVOY, unit=unit, dest=dest, target=target, path=None)
 
 
 def support(unit: Unit, target: Unit) -> Order:
