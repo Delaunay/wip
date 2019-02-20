@@ -7,7 +7,7 @@ from dgame.definition import AbstractBoardDefinition
 from dgame.order import Order
 from dgame.order import HOLD, MOVE, CONVOY, CONVOY_MOVE, SUPPORT_MOVE, SUPPORT, RETREAT, BUILD, DISBAND, WAIVE
 
-from typing import List, Optional
+from typing import List, Optional, Tuple, Set
 
 
 class Board:
@@ -26,6 +26,8 @@ class Board:
         self._units = set()
         self._loc_unit = {}
         self._time = 0
+        self._convoys = {}
+        self.get_all_possible_convoy()
 
         # Board wide cache we do not want to put caches in a lot of different places
         # so we should put them in only one spot for invalidation
@@ -123,7 +125,7 @@ class Board:
     def get_player(self, name: str):
         return self._players[name]
 
-    def get_convoy_paths(self, start_location, max_convoy_length, queue):
+    def _get_convoy_paths(self, start_location, max_convoy_length, queue):
         """ Returns a list of possible convoy destinations with the required units to get there
             Does a breadth first search from the starting location
 
@@ -228,7 +230,7 @@ class Board:
         # Getting all paths for each coasts in parallel
         pool = multiprocessing.Pool(multiprocessing.cpu_count())
         tasks = [(coast, max_convoy_length, queue) for coast in coasts]
-        results = pool.starmap(self.get_convoy_paths, tasks)
+        results = pool.starmap(self._get_convoy_paths, tasks)
         pool.close()
         results = [item for sublist in results for item in sublist]
         queue.put(None)
@@ -242,6 +244,39 @@ class Board:
         # Returning
         print('Found {} convoy paths for {}\n'.format(len(results), ''))
         return buckets
+
+    def get_all_possible_convoy(self):
+        cv = self.build_convoy_paths_cache()
+
+        def sort(lst):
+            lst = list(lst)
+            lst.sort()
+            return lst
+
+        def convert(paths):
+            return ((start, tuple(sort(fleets)), tuple(sort(end))) for (start, fleets, end) in paths)
+
+        aa = ((c, convert(p)) for c, p in sort(cv.items()))
+
+        for count, paths in aa:
+            for (start, fleets, ends) in paths:
+                # if start not in self._convoys:
+                #     self._convoys[start] = {}
+                #
+                # if count not in self._convoys[start]:
+                #     self._convoys[start][count] = {}
+                #
+                # for dest in ends:
+                #     self._convoys[start][count][dest] = set(fleets)
+
+                for dest in ends:
+                    self._convoys[(start.short, count, dest.short)] = tuple(fleets)
+                    #print(start.short, count, dest.short)
+
+                # print(start.__class__)
+
+    def is_convoy_paths(self, loc:  Province, depth: int, dest: Province) -> Tuple[Set[Province], Set[Province]]:
+        return self._convoys.get((loc.short, depth, dest.short))
 
 
 if __name__ == '__main__':
@@ -319,10 +354,17 @@ if __name__ == '__main__':
 
             convoy[start][count].add((fleets, ends))
 
-    for s, convoys in convoy.items():
-        print(s)
+    # for s, convoys in board._convoys.items():
+    #     print(s)
+    #
+    #     for c, items in convoys.items():
+    #
+    #         for (dest, ends) in items.items():
+    #
+    #             val = str(list(map(lambda x: str(x), ends)))
+    #             print('    ', c, dest, ': ', val, ' ' * (45 - len(val)))
 
-        for c, items in convoys.items():
-            for (f, ends) in items:
-                val = str(list(map(lambda x: str(x), ends)))
-                print('    ', c, ': ', val, ' ' * (45 - len(val)), list(map(lambda x: str(x), f)))
+
+    for i in range(0, 10):
+        print(board.is_convoy_paths(board.get_tile_by_name('YOR'), 2, board.get_tile_by_name('EDI')))
+

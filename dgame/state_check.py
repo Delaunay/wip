@@ -50,7 +50,8 @@ def compare_results(oldallr, newallr, board):
             unit = board.get_unit_at(board.get_tile_by_name(str(k)))
             print('-' * 80)
             print(unit, list(map(lambda x: x.short, unit.loc.neighbours)))
-            for tile, path in unit.reachable_tiles():
+
+            for tile, paths in unit.reachable_tiles().items():
                 print('     - ', tile, list(map(lambda x: x.short, tile.seas)))
             print('-' * 80)
 
@@ -109,8 +110,8 @@ class GameExecutor:
             return
 
         print(unit)
-        for tile, path in unit.reachable_tiles():
-            print('   ->', str(tile), 'path=', tuple(map(lambda x: str(x), path)))
+        for tile, paths in unit.reachable_tiles().items():
+            print('   ->', str(tile), 'path=', tuple(map(lambda x: str(tuple(map(lambda y: str(y), x))), paths)))
 
         print('Adjacent Tiles')
         for n in loc.neighbours:
@@ -184,11 +185,11 @@ class GameExecutor:
                     print(o, n)
                 print('-' * 80)
 
-                self.show_move_orders(move_orders, 'CLY')
+                self.show_move_orders(move_orders, 'BUL')
 
-                self.show_reachable('YOR')
+                self.show_reachable('CON')
 
-                self.show_loc_diff('NWG', old_results, new_results)
+                self.show_loc_diff('CON', old_results, new_results)
 
                 compare_results(old_results, new_results, self.new_game)
 
@@ -224,4 +225,4 @@ if __name__ == '__main__':
 
     game = GameExecutor('/home/user1/diplomacy/diplomacy/tests/network/1.json')
 
-    print(game.replay(3))
+    print(game.replay(12))

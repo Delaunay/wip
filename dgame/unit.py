@@ -80,64 +80,90 @@ class Unit:
         # then given that information we can check where multiple units can move to the same location and add the
         # support move order
 
-        for tile, path in tiles:
+        def make_convoy_path(path):
+            # first element is original loc
+            ite = iter(path)
+
+            for count, loc in enumerate(ite):
+                if count == size - 1:
+                    break
+
+                ncloc = self.board.get_unit_at(loc).loc.without_coast
+                order = convoy(self.board.get_unit_at(loc), self, dest=tile)
+
+                s = other_orders.get(ncloc)
+                if s is None:
+                    other_orders[ncloc] = {order}
+                else:
+                    s.add(order)
+
+        for tile, paths in tiles.items():
             if tile is self.loc:
                 continue
 
-            sup_unit = self.board.get_unit_at(tile)
-            size = len(path)
+            convoy_paths = set()
 
-            # we are not convoying / the tile is adjacent
-            if size == 1:
-                order = move(self, dest=tile)
-                orders.add(order)
-                append_move_order(tile, order)
+            for path in paths:
+                sup_unit = self.board.get_unit_at(tile)
+                #number_of_paths = len(paths)
+                #path = paths[0]
+                size = len(path)
 
-            # we are convoying to destination
-            elif tile is not self.loc:
-                order = convoy_move(self, tile, path=path)
-                orders.add(order)
-                append_move_order(tile, order)
+                #if number_of_paths > 1:
+                #    print(tile, paths)
 
-            # Support the unit we can reach if we can reach it without convoy
-            if sup_unit is not None and size == 1:
-                # we cannot support a unit that convoys us
-                orders.add(support(self, target=sup_unit))
+                # we are not convoying / the tile is adjacent
+                if size == 1:
+                    order = move(self, dest=tile)
+                    orders.add(order)
+                    append_move_order(tile, order)
 
-            if size > 1:
-                # There is a fleet unit which means we can convoy to a destination
-                # if not self.is_fleet and sup_unit.is_fleet and self.loc.seas:
+                # we are convoying to destination
+                elif tile is not self.loc:
+                    path2 = self.board.is_convoy_paths(self.loc, size - 1, tile)
 
-                # first element is original loc
-                ite = iter(path)
+                    if path2 is not None:
+                        # print('=>', self.loc, size - 1, tile, list(map(lambda x: str(x), path2)), list(map(lambda x: str(x), path)))
+                        order = convoy_move(self, tile, path=path)
+                        orders.add(order)
+                        append_move_order(tile, order)
 
-                for count, loc in enumerate(ite):
-                    if count == size - 1:
-                        break
+                        ite = iter(path)
 
-                    ncloc = self.board.get_unit_at(loc).loc.without_coast
-                    order = convoy(self.board.get_unit_at(loc), self, dest=tile)
+                        for count, loc in enumerate(ite):
+                            if count == size - 1:
+                                break
 
-                    s = other_orders.get(ncloc)
-                    if s is None:
-                        other_orders[ncloc] = {order}
-                    else:
-                        s.add(order)
+                            ncloc = self.board.get_unit_at(loc).loc.without_coast
+                            order = convoy(self.board.get_unit_at(loc), self, dest=tile)
+
+                            s = other_orders.get(ncloc)
+                            if s is None:
+                                other_orders[ncloc] = {order}
+                            else:
+                                s.add(order)
+
+                # Support the unit we can reach if we can reach it without convoy
+                if sup_unit is not None and size == 1:
+                    # we cannot support a unit that convoys us
+                    orders.add(support(self, target=sup_unit))
 
         return other_orders
 
     def reachable_tiles(self):
         if self._reachable_tiles_cache is None:
-            self._reachable_tiles_cache = set()
+            self._reachable_tiles_cache = {}
             self._reachable_tiles(False, cons(self.loc, IList()), self._reachable_tiles_cache)
 
             # remove coasts BUL/EC, BUL/SC => BUL
             if not self.is_fleet:
-                self._reachable_tiles_cache = set(
-                    map(lambda x: (x[0].without_coast, tuple(flatten(x[1]))), self._reachable_tiles_cache))
+                self._reachable_tiles_cache = {
+                    k.without_coast: tuple(v) for k, v in self._reachable_tiles_cache.items()
+                }
             else:
-                self._reachable_tiles_cache = set(
-                    map(lambda x: (x[0], tuple(flatten(x[1]))), self._reachable_tiles_cache))
+                self._reachable_tiles_cache = {
+                    k: tuple(v) for k, v in self._reachable_tiles_cache.items()
+                }
 
         return self._reachable_tiles_cache
 
@@ -158,7 +184,9 @@ class Unit:
 
             else:
                 if tile not in path:
-                    reachable.add((tile, path))
+                    if tile not in reachable:
+                        reachable[tile] = set()
+                    reachable[tile].add(path)
 
 
     @property
@@ -200,7 +228,11 @@ class Fleet(Unit):
                 has_common_sea = self.loc in tile.seas or len(self.loc.seas.intersection(tile.seas)) > 0
 
                 if (tile.is_water or has_common_sea) and tile not in path:
-                    reachable.add((tile, path))
+                    if tile not in reachable:
+                        reachable[tile] = set()
+                    reachable[tile].add(path)
+
+                    # reachable.add((tile, path))
 
             # reachable.discard((self.loc, any))
             return reachable
