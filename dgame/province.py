@@ -33,3 +33,6 @@ class Province:
     def __lt__(self, other):
         return self.short < other.short
 
+    def __index__(self):
+        """ A province is perfectly defined by its id which is the index in the PROVINCE_DB array"""
+        return self.id

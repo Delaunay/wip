@@ -1,11 +1,13 @@
 import json
-from dgame.board import Board
-from dgame.definition import BoardDefinitionFile
+from dgame.board.board import Board
+from dgame.board.definition import BoardDefinitionFile
 from dgame.power import Player
-from dgame.unit import get_all_possible_move_orders, make_unit
+from dgame.board.unit import get_all_possible_move_orders, make_unit, Context
 from dgame.order import build
 from dgame.province import Province
 from dgame.order import hold, move, support_move, support, convoy_move, convoy, retreat, disband, build, waive
+
+from diplomacy.engine.actions.action_space import get_all_possible_move_orders as get_orders
 
 from diplomacy.engine.game import Game
 
@@ -51,7 +53,7 @@ def compare_results(oldallr, newallr, board):
             print('-' * 80)
             print(unit, list(map(lambda x: x.short, unit.loc.neighbours)))
 
-            for tile, paths in unit.reachable_tiles().items():
+            for tile, paths in unit.reachable_tiles(context).items():
                 print('     - ', tile, list(map(lambda x: x.short, tile.seas)))
             print('-' * 80)
 
@@ -101,7 +103,7 @@ class GameExecutor:
         a.sort()
         return a
 
-    def show_reachable(self, loc):
+    def show_reachable(self, loc, ctx=None):
         print('>' * 10, 'REACHABLE (loc=', loc, ')')
         loc: Province = self.new_game.get_tile_by_name(loc)
         unit = self.new_game.get_unit_at(loc)
@@ -110,7 +112,7 @@ class GameExecutor:
             return
 
         print(unit)
-        for tile, paths in unit.reachable_tiles().items():
+        for tile, paths in unit.reachable_tiles(ctx).items():
             print('   ->', str(tile), 'path=', tuple(map(lambda x: str(tuple(map(lambda y: str(y), x))), paths)))
 
         print('Adjacent Tiles')
@@ -162,15 +164,20 @@ class GameExecutor:
                 # Set new game in function of cache
 
                 self.new_game = self.make_new_game(state)
-                move_orders = {}
-                new_results = get_all_possible_move_orders(self.new_game, move_orders)
+
+                ctx = Context()
+                move_orders = ctx.move_orders
+
+                self.new_game.from_game_state(self.old_game)
+
+                new_results = get_all_possible_move_orders(self.new_game, ctx)
                 old_results = self.old_game.get_all_possible_orders()
 
                 old_units = []
                 new_units = []
 
                 for unit in self.new_game.units():
-                    new_units.append('{:>30} {}'.format(unit.owner.power[0], unit))
+                    new_units.append('{:>30} {}'.format(unit.owner.power.name, unit))
 
                 for name, p in self.old_game.powers.items():
                     for u in p.units:
@@ -187,9 +194,9 @@ class GameExecutor:
 
                 self.show_move_orders(move_orders, 'BUL')
 
-                self.show_reachable('CON')
+                self.show_reachable('CON', ctx)
 
-                self.show_loc_diff('CON', old_results, new_results)
+                self.show_loc_diff('YOR', old_results, new_results)
 
                 compare_results(old_results, new_results, self.new_game)
 
@@ -225,4 +232,4 @@ if __name__ == '__main__':
 
     game = GameExecutor('/home/user1/diplomacy/diplomacy/tests/network/1.json')
 
-    print(game.replay(12))
+    print(game.replay(1))

@@ -1,28 +1,24 @@
-from typing import Tuple
-
 from dgame.province import Province
 
 
 class AbstractBoardDefinition:
     """
-        This is an abstract class definition how a board is structured.
+        This specifies how a board is structured.
         The Game engine should be able to handle any kind of board given its definition.
 
-        This class holds the adajency list used by the dgame engine to resolve orders
+        This class holds the adjacency list used by the game engine to resolve orders
+
+        PROVINCE_DB should be an immutable data structure that support random access and hold all the available province.
+        The province in turn hold all the information needed for us to compute possible moves.
     """
-    PROVINCE_DB: Tuple[any]
+    PROVINCE_DB = None
 
     def initial_condition(self):
+        """ return the initial condition of a board"""
         raise NotImplementedError
 
-    def province_from_string(self, name: str) -> 'Provinces':
-        """
-
-            :param name:
-            :return:
-            :type name: str
-            :rtype: Provinces
-        """
+    def province_from_string(self, name):
+        """ given the short name of a province `name` return the province object corresponding"""
         raise NotImplementedError
 
 
@@ -89,11 +85,9 @@ def make_database(powers, unowned, provinces, adjacency_list, spring, year, phas
 
 class BoardDefinitionFile(AbstractBoardDefinition):
     def __init__(self, file_name: str):
-        from dgame.parser import MapParser
+        from dgame.board.parser import parse_map_definition
 
-        parser = MapParser()
-
-        parser.parse(file_name)
+        parser = parse_map_definition(file_name)
 
         self.powers = parser.powers
         self.year = parser.year
@@ -115,12 +109,6 @@ class BoardDefinitionFile(AbstractBoardDefinition):
 
     def initial_condition(self):
         return self.powers
-
-
-class BoardDefinitionLegacy(AbstractBoardDefinition):
-
-    def __init__(self, game):
-        pass
 
 
 if __name__ == '__main__':

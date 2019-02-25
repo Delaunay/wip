@@ -7,14 +7,16 @@ def clean(lst):
     return list(no_empty)
 
 
+# @dataclass
 class MapDefinition:
-    powers = []
-    unowned = []
-    provinces = []
-    adjacency_list = []
-    spring = None
-    year = None
-    phase = None
+    def __init__(self):
+        self.powers = []  # type: List[Tuple[name, people, supply_centers, armies]]
+        self.unowned = []
+        self.provinces = []
+        self.adjacency_list = []
+        self.spring = None
+        self.year = None
+        self.phase = None
 
 
 class MapParser:
@@ -31,22 +33,19 @@ class MapParser:
         self.file = None
         self.lines = None
 
-        self.powers = []
-        self.unowned = []
-        self.provinces = []
-        self.adjacency_list = []
-        self.spring = None
-        self.year = None
-        self.phase = None
+        self.map = MapDefinition()
 
     def match(self, regex):
+        """ match regex with current line and return the result """
         if self.line is not None:
             return re.search(regex, self.line)
 
     def is_done(self):
+        """ check if we have reached the end of the file """
         return self.index >= len(self.lines) - 1
 
     def readline(self):
+        """ move the cursor one line and return it. Returns None if at the end of the file """
         if self.index >= len(self.lines) - 1:
             return None
 
@@ -54,6 +53,7 @@ class MapParser:
         return self.lines[self.index]
 
     def next(self):
+        """ get the next non empty line that is not a comment """
         self.line = self.readline()
 
         while self.line is not None and (len(self.line.strip()) == 0 or self.line[0] == '#'):
@@ -62,6 +62,7 @@ class MapParser:
         return self.line
 
     def parse_powers(self):
+        """ parse a power definition Name, people name, supply centers, armies"""
         # Find the power section
         while True:
             p = self.match(self.power)
@@ -72,6 +73,8 @@ class MapParser:
             self.parse_power(p)
 
     def parse_power(self, p):
+        """ parse a power definition Name, people name, supply centers, armies"""
+
         name = p.group(1)
         people = p.group(2)
         supply_centers = clean(p.group(3).split(' '))
@@ -92,15 +95,19 @@ class MapParser:
             armies.append((army_type, loc))
             self.next()
 
-        self.powers.append((name, people, supply_centers, armies))
+        self.map.powers.append((name, people, supply_centers, armies))
 
     def parse_unowned(self):
+        """ parse unowned supply centers """
         if self.line.startswith('UNOWNED'):
             values = clean(self.line.split(' '))[1:]
-            self.unowned.extend(values)
+            self.map.unowned.extend(values)
             self.next()
 
     def parse_province_names(self):
+        """ parse the list of provinces with the mapping  full_name => short
+            we only allow the use of the first short name in our game
+        """
 
         p = self.match(self.province)
 
@@ -108,12 +115,13 @@ class MapParser:
             full_name = p.group(1).strip()
             shorts = clean(p.group(2).split(' '))
 
-            self.provinces.append((full_name, shorts))
+            self.map.provinces.append((full_name, shorts))
 
             self.next()
             p = self.match(self.province)
 
     def parse_adjacency_list(self):
+        """ parse the adjacency list of each province"""
         p = self.match(self.properties)
 
         while p is not None:
@@ -122,12 +130,13 @@ class MapParser:
             name = p.group(2)
             adjacent_tiles = clean(p.group(4).split(' '))
 
-            self.adjacency_list.append((tile_type, name, adjacent_tiles))
+            self.map.adjacency_list.append((tile_type, name, adjacent_tiles))
 
             self.next()
             p = self.match(self.properties)
 
     def parse(self, file_name: str):
+        """ parse the definition file until the end of the file"""
         with open(file_name, 'r') as text:
             self.file = text
             self.lines = self.file.readlines()
@@ -135,7 +144,7 @@ class MapParser:
 
             self.next()
 
-            _, self.spring, self.year, self.phase = self.line.split(' ')
+            _, self.map.spring, self.map.year, self.map.phase = self.line.split(' ')
 
             self.next()
 
@@ -149,14 +158,9 @@ class MapParser:
 
                 self.parse_adjacency_list()
 
+        return self.map
 
-if __name__ == '__main__':
 
-    parser = MapParser()
-
-    parser.parse('/home/user1/diplomacy/diplomacy/maps/standard.map')
-
-    print(parser.unowned)
-    print(parser.powers)
-    #rint(parser.adjacency_list)
-    #print(parser.provinces)
+def parse_map_definition(file_name):
+    """ parse a diplomacy map definition file and return the data stored inside it """
+    return MapParser().parse(file_name)

@@ -6,17 +6,23 @@ from dgame.order import CONVOY_MOVE
 
 from enum import IntEnum, unique
 from typing import Set, List, Dict
-from dgame.ImmutableList import IList, cons, flatten
+from dgame.ImmutableList import nil
 
 
-# ##def flatten(a: Iterable) -> List[any]:
-#     if isinstance(a, Iterable):
-#         r = []
-#         for i in a:
-#             elem = flatten(i)
-#             r.extend(elem)
-#         return r
-#     return [a]
+class Context:
+
+    def __init__(self):
+        # [mutable] Cache of all the reachable tile per units
+        self.reachable_tiles = {}
+
+        # [immutable] Path we are currently exploring
+        self.path = nil()
+
+        # [mutable] Save all the move orders for later
+        self.move_orders = {}
+
+        # [immutable] are we inside a convoy path
+        # is_convoy = False
 
 
 @unique
@@ -45,11 +51,10 @@ class Unit:
         self.owner = owner
         self.board = board
         self.unit_type = None
-        self._reachable_tiles_cache = None
 
-    def get_possible_move_order(self, other_orders=None, move_orders=None) -> Dict[Province, Set[Order]]:
+    def get_possible_move_order(self, other_orders=None, context: Context =None) -> Dict[Province, Set[Order]]:
         """ All possible order during the move phase """
-        tiles = self.reachable_tiles()
+        tiles = self.reachable_tiles(context)
         ncloc = self.loc.without_coast
 
         orders = {hold(self)}
@@ -65,16 +70,13 @@ class Unit:
 
             orders.add(hold(self))
 
-        if move_orders is None:
-            move_orders = {}
-
         def append_move_order(tile, order):
             loc_nc = tile.without_coast
 
-            if loc_nc not in move_orders:
-                move_orders[loc_nc] = set()
+            if loc_nc not in context.move_orders:
+                context.move_orders[loc_nc] = set()
 
-            move_orders[loc_nc].add(order)
+            context.move_orders[loc_nc].add(order)
 
         # first we establish where can a unit move
         # then given that information we can check where multiple units can move to the same location and add the
@@ -88,7 +90,12 @@ class Unit:
                 if count == size - 1:
                     break
 
-                ncloc = self.board.get_unit_at(loc).loc.without_coast
+                fleet = self.board.get_unit_at(loc)
+
+                if fleet is None:
+                    break
+
+                ncloc = fleet.loc.without_coast
                 order = convoy(self.board.get_unit_at(loc), self, dest=tile)
 
                 s = other_orders.get(ncloc)
@@ -101,16 +108,9 @@ class Unit:
             if tile is self.loc:
                 continue
 
-            convoy_paths = set()
-
             for path in paths:
                 sup_unit = self.board.get_unit_at(tile)
-                #number_of_paths = len(paths)
-                #path = paths[0]
                 size = len(path)
-
-                #if number_of_paths > 1:
-                #    print(tile, paths)
 
                 # we are not convoying / the tile is adjacent
                 if size == 1:
@@ -123,25 +123,11 @@ class Unit:
                     path2 = self.board.is_convoy_paths(self.loc, size - 1, tile)
 
                     if path2 is not None:
-                        # print('=>', self.loc, size - 1, tile, list(map(lambda x: str(x), path2)), list(map(lambda x: str(x), path)))
                         order = convoy_move(self, tile, path=path)
                         orders.add(order)
                         append_move_order(tile, order)
 
-                        ite = iter(path)
-
-                        for count, loc in enumerate(ite):
-                            if count == size - 1:
-                                break
-
-                            ncloc = self.board.get_unit_at(loc).loc.without_coast
-                            order = convoy(self.board.get_unit_at(loc), self, dest=tile)
-
-                            s = other_orders.get(ncloc)
-                            if s is None:
-                                other_orders[ncloc] = {order}
-                            else:
-                                s.add(order)
+                        make_convoy_path(path)
 
                 # Support the unit we can reach if we can reach it without convoy
                 if sup_unit is not None and size == 1:
@@ -150,22 +136,25 @@ class Unit:
 
         return other_orders
 
-    def reachable_tiles(self):
-        if self._reachable_tiles_cache is None:
-            self._reachable_tiles_cache = {}
-            self._reachable_tiles(False, cons(self.loc, IList()), self._reachable_tiles_cache)
+    def reachable_tiles(self, context: Context):
+        if self in context.reachable_tiles:
+            return context.reachable_tiles[self]
 
-            # remove coasts BUL/EC, BUL/SC => BUL
-            if not self.is_fleet:
-                self._reachable_tiles_cache = {
-                    k.without_coast: tuple(v) for k, v in self._reachable_tiles_cache.items()
-                }
-            else:
-                self._reachable_tiles_cache = {
-                    k: tuple(v) for k, v in self._reachable_tiles_cache.items()
-                }
+        reachable = {}
+        self._reachable_tiles(False, nil().append(self.loc), reachable)
 
-        return self._reachable_tiles_cache
+        # remove coasts BUL/EC, BUL/SC => BUL
+        if not self.is_fleet:
+            reachable = {
+                k.without_coast: tuple(v) for k, v in reachable.items()
+            }
+        else:
+            reachable = {
+                k: tuple(v) for k, v in reachable.items()
+            }
+
+        context.reachable_tiles[self] = reachable
+        return reachable
 
     def _reachable_tiles(self, convoy_: bool, path: List[Province], reachable: Set[Province]) -> Set[Province]:
         """ Compute all the reachable tiles for a given unit.
@@ -179,8 +168,7 @@ class Unit:
 
                 if unit is not None and unit.is_fleet and tile not in path:
                     # There is a fleet on the tile so we might be able to convoy though fleet chains
-                    path = path + self.loc
-                    unit._reachable_tiles(convoy_=True, path=path, reachable=reachable)
+                    unit._reachable_tiles(convoy_=True, path=path.append(self.loc), reachable=reachable)
 
             else:
                 if tile not in path:
@@ -192,6 +180,9 @@ class Unit:
     @property
     def is_fleet(self):
         return self.unit_type == UnitType.Fleet
+
+    def invalidate_cache(self):
+        self._reachable_tiles_cache = None
 
 
 class Army(Unit):
@@ -237,8 +228,7 @@ class Fleet(Unit):
             # reachable.discard((self.loc, any))
             return reachable
 
-        path = path + self.loc
-        super()._reachable_tiles(convoy_=True, path=path, reachable=reachable)
+        super()._reachable_tiles(convoy_=True, path=path.append(self.loc), reachable=reachable)
 
 
 def make_unit(type: UnitType, loc: Province, owner: Player = None, board: 'Board' = None) -> Unit:
@@ -256,17 +246,17 @@ def make_unit(type: UnitType, loc: Province, owner: Player = None, board: 'Board
     return Army(loc, owner, board)
 
 
-def get_all_possible_move_orders(board, move_orders=None):
+def get_all_possible_move_orders(board, context=None):
     other_orders = {}
-    if move_orders is None:
-        move_orders = {}
+
+    if context is None:
+        context = Context()
 
     for unit in board.units():
-        unit.get_possible_move_order(other_orders, move_orders)
-
+        unit.get_possible_move_order(other_orders, context)
 
     # no coast destination so we can unify fleet on coast and army supporting that fleet
-    for dest_nc, orders in move_orders.items():
+    for dest_nc, orders in context.move_orders.items():
 
         for o1 in orders:
             unit = o1.unit
@@ -291,7 +281,7 @@ def get_all_possible_move_orders(board, move_orders=None):
                         if unit.loc not in o2.path:
                             order = support_move(unit, target=target, dest=o2.dest)
                             corder.add(order)
-                        else: # Duplicate ?
+                        else:  # Duplicate ?
                             order = convoy(unit, target, dest=o2.dest)
                             corder.add(order)
                             #print(order, set(map(lambda x: str(x), o2.path)))
